@@ -6,7 +6,7 @@ before_script:
 - ./create_config.sh
 script:
 - npm test
-- node lib/run.js
+- node lib/run.js --projectKey ${SPHERE_PROJECT_KEY} --clientId ${SPHERE_CLIENT_ID} --clientSecret ${SPHERE_CLIENT_SECRET}
 env:
   global:
   - secure: YzWHuqXSgtM1JyxrP4zhldX8QbN3+U7733AM8Lb6g1zEvh7GbMyzukqPP331ZURF3y5df4gFoGUe5flDJxWF92+qL+Ggar1pWvD7XHrWuEjh3r+VI/EeSQwAN2wbKOM1FIA4fQY56PWJJmz6ZcFcBF6Sw7WsJzBw63bo3WkrsP8=
