@@ -10,7 +10,7 @@ describe '#matchVariant', ->
         client_secret: 'z'
     @updater = new MarketPlaceStockUpdater opts, 'a', 'b', 'c'
 
-  it 'should TODO', ->
+  it 'should create hash entry for master2retailer mapping', ->
     variant =
       sku: 'rSKU'
       attributes: [
