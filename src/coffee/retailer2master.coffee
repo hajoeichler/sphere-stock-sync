@@ -25,7 +25,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
     deferred = Q.defer()
     Q.all([@retailerProducts(), @allInventoryEntries(@rest)])
     .then ([retailerProducts, masterStocks]) =>
-      @existingStocks = masterStocks
+      @existingInventoryEntries = masterStocks
 
       master2retailer = {}
       for p in retailerProducts
@@ -38,7 +38,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
         continue if not rSku
         @sku2index[rSku] = i
 
-      deferred.resolve true
+      deferred.resolve @sku2index
     .fail (msg) ->
       deferred.reject msg
     deferred.promise
