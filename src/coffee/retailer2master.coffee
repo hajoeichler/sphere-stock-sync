@@ -6,15 +6,16 @@ Q = require 'q'
 class MarketPlaceStockUpdater extends InventoryUpdater
   constructor: (@options, @retailerProjectKey, @retailerClientId, @retailerClientSecret) ->
     super @options
-    c =
+    cfg =
       project_key: @retailerProjectKey
       client_id: @retailerClientId
       client_secret: @retailerClientSecret
-    @retailerRest = new Rest config: c
+    @retailerRest = new Rest config: cfg
 
   run: (callback) ->
     @allInventoryEntries(@retailerRest).then (retailerStock) =>
-      @initMatcher().then (retVal) =>
+      @initMatcher().then (sku2index) =>
+        @sku2index = sku2index
         @createOrUpdate retailerStock, callback
       .fail (msg)->
         @returnResult false, msg, callback
@@ -33,12 +34,13 @@ class MarketPlaceStockUpdater extends InventoryUpdater
         for v in p.masterData.current.variants
           _.extend(master2retailer, @matchVariant(v))
 
+      sku2index = {}
       for es, i in masterStocks
         rSku = master2retailer[es.sku]
         continue if not rSku
-        @sku2index[rSku] = i
+        sku2index[rSku] = i
 
-      deferred.resolve @sku2index
+      deferred.resolve sku2index
     .fail (msg) ->
       deferred.reject msg
     deferred.promise
@@ -47,9 +49,9 @@ class MarketPlaceStockUpdater extends InventoryUpdater
     deferred = Q.defer()
     @retailerRest.GET "/products?limit=0", (error, response, body) ->
       if error
-        deferred.reject "Error: " + error
+        deferred.reject 'Error on getting retailers products: ' + error
       else if response.statusCode isnt 200
-        deferred.reject "Problem: " + body
+        deferred.reject 'Problem on getting retailers products: ' + error
       else
         retailerProducts = JSON.parse(body).results
         deferred.resolve retailerProducts
@@ -72,7 +74,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
     # Idea: create stock only for entries that have a product that have a valid mastersku set
     deferred = Q.defer()
     @bar.tick() if @bar
-    deferred.reject "The updater will not create a new inventory entry for sku: " + stock.sku
-    Q.defer()
+    deferred.resolve 'The updater will not create new inventory entry. sku: ' + stock.sku
+    deferred.promise
 
 module.exports = MarketPlaceStockUpdater
