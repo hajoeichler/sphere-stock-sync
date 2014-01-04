@@ -70,7 +70,9 @@ class MarketPlaceStockUpdater extends InventoryUpdater
   create: (stock) ->
     # We don't create new stock entries for now - only update existing!
     # Idea: create stock only for entries that have a product that have a valid mastersku set
+    deferred = Q.defer()
     @bar.tick() if @bar
-    Q.defer().promise
+    deferred.reject "The updater will not create a new inventory entry for sku: " + stock.sku
+    Q.defer()
 
 module.exports = MarketPlaceStockUpdater
