@@ -48,7 +48,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
     @retailerRest.GET "/products?limit=0", (error, response, body) ->
       if error
         deferred.reject "Error: " + error
-      else if response.statusCode != 200
+      else if response.statusCode isnt 200
         deferred.reject "Problem: " + body
       else
         retailerProducts = JSON.parse(body).results
@@ -60,7 +60,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
     rSku = variant.sku
     return m2r if not rSku
     for a in variant.attributes
-      continue if a.name != 'mastersku'
+      continue if a.name isnt 'mastersku'
       mSku = a.value
       return m2r if not mSku
       m2r[mSku] = rSku
