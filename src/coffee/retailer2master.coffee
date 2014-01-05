@@ -4,12 +4,12 @@ Rest = require('sphere-node-connect').Rest
 Q = require 'q'
 
 class MarketPlaceStockUpdater extends InventoryUpdater
-  constructor: (@options, @retailerProjectKey, @retailerClientId, @retailerClientSecret) ->
-    super @options
+  constructor: (options, retailerProjectKey, retailerClientId, retailerClientSecret) ->
+    super options
     cfg =
-      project_key: @retailerProjectKey
-      client_id: @retailerClientId
-      client_secret: @retailerClientSecret
+      project_key: retailerProjectKey
+      client_id: retailerClientId
+      client_secret: retailerClientSecret
     @retailerRest = new Rest config: cfg
 
   run: (callback) ->
