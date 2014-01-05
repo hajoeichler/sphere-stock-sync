@@ -5,9 +5,6 @@ argv = require('optimist')
   .argv
 MarketPlaceStockUpdater = require('../main').MarketPlaceStockUpdater
 
-Config.timeout = 60000
-Config.showProgress = true
-
 updater = new MarketPlaceStockUpdater(Config, argv.projectKey, argv.clientId, argv.clientSecret)
 updater.run (msg) ->
   console.log msg
