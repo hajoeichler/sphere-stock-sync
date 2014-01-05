@@ -12,6 +12,9 @@ class MarketPlaceStockUpdater extends InventoryUpdater
       client_secret: retailerClientSecret
     @retailerRest = new Rest config: cfg
 
+  elasticio: (msg, cfg, cb, snapshot) ->
+    @run cb
+
   run: (callback) ->
     @allInventoryEntries(@retailerRest).then (retailerStock) =>
       @initMatcher().then (sku2index) =>
