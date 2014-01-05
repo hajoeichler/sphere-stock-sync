@@ -1,3 +1,4 @@
+_ = require('underscore')._
 Config = require '../config'
 MarketPlaceStockUpdater = require('../main').MarketPlaceStockUpdater
 Q = require('q')
@@ -111,9 +112,9 @@ describe '#run', ->
                 expect(response.statusCode).toBe 201
                 @updater.run (msg) =>
                   expect(msg.status).toBe true
-                  expect(msg.message.length).toBe 2
-                  expect(msg.message[0]).toBe "The updater will not create new inventory entry. sku: mastersku-#{unique}"
-                  expect(msg.message[1]).toBe 'Inventory entry updated.'
+                  expect(_.size(msg.message)).toBe 2
+                  expect(msg.message["The updater will not create new inventory entry. sku: mastersku-#{unique}"]).toBe 1
+                  expect(msg.message['Inventory entry updated.']).toBe 1
                   @updater.rest.GET "/inventory?where=sku%3D%22mastersku-#{unique}%22", (error, response, body) ->
                     expect(response.statusCode).toBe 200
                     entries = JSON.parse(body).results
