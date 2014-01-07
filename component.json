@@ -45,7 +45,7 @@
     "actions": {
         "services": {
             "main": "elasticio.js",
-            "title": "Stock Sync",
+            "title": "Stock Sync"
         }
     }
 }
