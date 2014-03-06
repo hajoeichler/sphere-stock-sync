@@ -7,5 +7,8 @@ MarketPlaceStockUpdater = require('../main').MarketPlaceStockUpdater
 
 updater = new MarketPlaceStockUpdater(Config, argv.projectKey, argv.clientId, argv.clientSecret)
 updater.run (msg) ->
-  console.log msg
-  process.exit 1 unless msg.status
+  if msg.status
+    console.log msg
+    process.exit 0
+  console.error msg
+  process.exit 1
