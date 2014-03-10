@@ -30,11 +30,10 @@
   },
   "dependencies": {
     "optimist": "0.6.0",
-    "progress": "~1.1.2",
     "q": "~1.0.0",
-    "sphere-node-connect": "~0.2.2",
-    "sphere-node-sync": "~0.3.4",
-    "underscore": "~1.5.2"
+    "sphere-node-connect": "~0.4.4",
+    "sphere-node-sync": "~0.4.5",
+    "underscore": "~1.6.0"
   },
   "devDependencies": {
     "coveralls": "~2.6.1",

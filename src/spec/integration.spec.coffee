@@ -35,14 +35,14 @@ describe '#run', ->
       deferred.promise
 
     @updater.rest.GET "/inventory?limit=0", (error, response, body) =>
-      stocks = JSON.parse(body).results
+      stocks = body.results
       console.log "Cleaning up #{stocks.length} inventory entries."
       dels = []
       for s in stocks
         dels.push delInventory(s.id)
 
       @updater.rest.GET "/products?limit=0", (error, response, body) ->
-        products = JSON.parse(body).results
+        products = body.results
         console.log "Cleaning up #{stocks.length} products."
         dels = []
         for p in products
@@ -82,9 +82,9 @@ describe '#run', ->
         isRequired: false
         inputHint: 'SingleLine'
       }]
-    @updater.rest.POST '/product-types', JSON.stringify(pt), (error, response, body) =>
+    @updater.rest.POST '/product-types', pt, (error, response, body) =>
       expect(response.statusCode).toBe 201
-      pt = JSON.parse(body)
+      pt = body
       p =
         productType:
           typeId: 'product-type'
@@ -95,20 +95,20 @@ describe '#run', ->
           en: "p-#{unique}"
         masterVariant:
           sku: "mastersku-#{unique}"
-      @updater.rest.POST "/products", JSON.stringify(p), (error, response, body) =>
+      @updater.rest.POST "/products", p, (error, response, body) =>
         expect(response.statusCode).toBe 201
         p.slug.en = "p-#{unique}1"
         p.masterVariant.sku = "retailer-#{unique}"
         p.masterVariant.attributes = [
           { name: 'mastersku', value: "mastersku-#{unique}" }
         ]
-        @updater.rest.POST "/products", JSON.stringify(p), (error, response, body) =>
+        @updater.rest.POST "/products", p, (error, response, body) =>
           expect(response.statusCode).toBe 201
           entry =
             sku: "retailer-#{unique}"
             quantityOnStock: 3
           @updater.ensureChannelByKey(@updater.rest, Config.config.project_key).then (retailerChannel) =>
-            @updater.rest.POST "/inventory", JSON.stringify(entry), (error, response, body) =>
+            @updater.rest.POST "/inventory", entry, (error, response, body) =>
               expect(response.statusCode).toBe 201
               entry =
                 sku: "mastersku-#{unique}"
@@ -116,13 +116,13 @@ describe '#run', ->
                 supplyChannel:
                   typeId: 'channel'
                   id: retailerChannel.id
-              @updater.rest.POST "/inventory", JSON.stringify(entry), (error, response, body) =>
+              @updater.rest.POST "/inventory", entry, (error, response, body) =>
                 expect(response.statusCode).toBe 201
                 @updater.run (msg) =>
                   expect(msg.status).toBe true
                   expect(msg.message).toBe 'Inventory entry updated.'
                   @updater.rest.GET "/inventory?where=sku%3D%22mastersku-#{unique}%22", (error, response, body) ->
                     expect(response.statusCode).toBe 200
-                    entries = JSON.parse(body).results
+                    entries = body.results
                     expect(entries[0].quantityOnStock).toBe 3
                     done()

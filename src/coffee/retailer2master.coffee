@@ -92,7 +92,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
       else if response.statusCode isnt 200
         deferred.reject 'Problem on getting retailers products: ' + error
       else
-        retailerProducts = JSON.parse(body).results
+        retailerProducts = body.results
         deferred.resolve retailerProducts
     deferred.promise
 
