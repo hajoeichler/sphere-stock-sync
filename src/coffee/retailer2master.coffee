@@ -4,26 +4,29 @@ Rest = require('sphere-node-connect').Rest
 Q = require 'q'
 
 class MarketPlaceStockUpdater extends InventoryUpdater
-  constructor: (options, retailerProjectKey, retailerClientId, retailerClientSecret) ->
-    super options
-    @retailerProjectKey = retailerProjectKey
-    cfg =
-      project_key: retailerProjectKey
-      client_id: retailerClientId
-      client_secret: retailerClientSecret
-    @retailerRest = new Rest config: cfg
+  constructor: (options = {}) ->
+    throw new Error 'No base configuration in options!' unless options.baseConfig
+    throw new Error 'No master configuration in options!' unless options.master
+    throw new Error 'No retailer configuration in options!' unless options.retailer
+    super config: _.extend(options.master, options.baseConfig)
+    @logger = options.baseConfig.logConfig.logger
+    @retailerProjectKey = options.retailer.project_key
+    @retailerRest = new Rest config: _.extend(options.retailer, options.baseConfig)
+    @masterRest = @rest
 
   run: (callback) ->
     Q.all([
       @allInventoryEntries(@retailerRest),
-      @ensureChannelByKey(@rest, @retailerProjectKey)
+      @ensureChannelByKey(@masterRest, @retailerProjectKey)
     ]).spread (retailerInventory, retailerChannel) =>
+      @logger.debug "Retailer inventory entries: #{_.size retailerInventory}" if @logger
       enhancedRetailerInventory = @_enhanceWithRetailerChannel retailerInventory, retailerChannel.id
 
       @initMatcher().then (mapping) =>
         validInventory = @_getInventoryWithMapping enhancedRetailerInventory, mapping
+        @logger.debug "Inventory entries with mapping #: #{_.size validInventory}" if @logger
         unless _.size(enhancedRetailerInventory) is _.size(validInventory)
-          console.error "There are inventory entries we can't map to master"
+          @logger.error "There are inventory entries we can't map to master" if @logger
 
         mappedInventory = @_replaceSKUs validInventory, mapping
         @createOrUpdate mappedInventory, callback
@@ -35,8 +38,12 @@ class MarketPlaceStockUpdater extends InventoryUpdater
     deferred = Q.defer()
     Q.all([
       @retailerProducts()
-      @allInventoryEntries(@rest)
+      @allInventoryEntries(@masterRest)
     ]).spread (retailerProducts, masterInventory) =>
+      if @logger
+        @logger.debug "Master inventory entries: #{_.size masterInventory}"
+        @logger.debug "Retailer products: #{_.size retailerProducts}"
+
       @existingInventoryEntries = masterInventory
       deferred.resolve @_createSkuMap(retailerProducts)
 
@@ -82,11 +89,10 @@ class MarketPlaceStockUpdater extends InventoryUpdater
       entry
 
   # TODO:
-  # - get in batches
   # - get only published products
   retailerProducts: (staged = true) ->
     deferred = Q.defer()
-    @retailerRest.GET "/product-projections?staged=#{staged}&limit=0", (error, response, body) ->
+    @retailerRest.GET "/product-projections?limit=0", (error, response, body) ->
       if error
         deferred.reject 'Error on getting retailers products: ' + error
       else if response.statusCode isnt 200
@@ -94,15 +100,6 @@ class MarketPlaceStockUpdater extends InventoryUpdater
       else
         retailerProducts = body.results
         deferred.resolve retailerProducts
-    deferred.promise
-
-  # TODO: remove!
-  create: (stock) ->
-    # We don't create new stock entries for now - only update existing!
-    # Idea: create stock only for entries that have a product that have a valid mastersku set
-    deferred = Q.defer()
-    @tickProgress()
-    deferred.resolve 'The updater will not create new inventory entry. sku: ' + stock.sku
     deferred.promise
 
 module.exports = MarketPlaceStockUpdater

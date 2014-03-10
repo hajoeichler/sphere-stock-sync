@@ -1,6 +1,7 @@
 _ = require('underscore')._
 Config = require '../config'
 MarketPlaceStockUpdater = require '../lib/retailer2master'
+Logger = require '../lib/logger'
 Q = require 'q'
 
 # Increase timeout
@@ -8,7 +9,20 @@ jasmine.getEnv().defaultTimeoutInterval = 20000
 
 describe '#run', ->
   beforeEach (done) ->
-    @updater = new MarketPlaceStockUpdater Config, Config.config.project_key, Config.config.client_id, Config.config.client_secret
+    options =
+      baseConfig:
+        logConfig:
+          logger: new Logger()
+      master:
+        project_key: Config.config.project_key
+        client_id: Config.config.client_id
+        client_secret: Config.config.client_secret
+      retailer:
+        project_key: Config.config.project_key
+        client_id: Config.config.client_id
+        client_secret: Config.config.client_secret
+
+    @updater = new MarketPlaceStockUpdater options
 
     delInventory = (id) =>
       deferred = Q.defer()
@@ -28,7 +42,7 @@ describe '#run', ->
         if error
           deferred.reject error
         else
-          if response.statusCode is 200 or response.statusCode is 404
+          if response.statusCode is 200 or response.statusCode is 400
             deferred.resolve true
           else
             deferred.reject body
@@ -70,7 +84,7 @@ describe '#run', ->
   # - check that master inventory is updated
   it 'sync one inventory entry', (done) ->
     unique = new Date().getTime()
-    pt =
+    productType =
       name: "PT-#{unique}"
       description: 'bla'
       attributes: [{
@@ -82,47 +96,53 @@ describe '#run', ->
         isRequired: false
         inputHint: 'SingleLine'
       }]
-    @updater.rest.POST '/product-types', pt, (error, response, body) =>
+    @updater.rest.POST '/product-types', productType, (error, response, body) =>
       expect(response.statusCode).toBe 201
-      pt = body
-      p =
+      product =
         productType:
           typeId: 'product-type'
-          id: pt.id
+          id: body.id
         name:
           en: "P-#{unique}"
         slug:
           en: "p-#{unique}"
         masterVariant:
           sku: "mastersku-#{unique}"
-      @updater.rest.POST "/products", p, (error, response, body) =>
+      @updater.rest.POST "/products", product, (error, response, body) =>
         expect(response.statusCode).toBe 201
-        p.slug.en = "p-#{unique}1"
-        p.masterVariant.sku = "retailer-#{unique}"
-        p.masterVariant.attributes = [
+        product.slug.en = "p-#{unique}1"
+        product.masterVariant.sku = "retailer-#{unique}"
+        product.masterVariant.attributes = [
           { name: 'mastersku', value: "mastersku-#{unique}" }
         ]
-        @updater.rest.POST "/products", p, (error, response, body) =>
+        @updater.rest.POST "/products", product, (error, response, body) =>
           expect(response.statusCode).toBe 201
-          entry =
-            sku: "retailer-#{unique}"
-            quantityOnStock: 3
-          @updater.ensureChannelByKey(@updater.rest, Config.config.project_key).then (retailerChannel) =>
-            @updater.rest.POST "/inventory", entry, (error, response, body) =>
-              expect(response.statusCode).toBe 201
-              entry =
-                sku: "mastersku-#{unique}"
-                quantityOnStock: 7
-                supplyChannel:
-                  typeId: 'channel'
-                  id: retailerChannel.id
+          data =
+            actions: [
+              { action: 'publish' }
+            ]
+            version: body.version
+          @updater.rest.POST "/products/#{body.id}", data, (error, response, body) =>
+            expect(response.statusCode).toBe 200
+            entry =
+              sku: "retailer-#{unique}"
+              quantityOnStock: 3
+            @updater.ensureChannelByKey(@updater.rest, Config.config.project_key).then (retailerChannel) =>
               @updater.rest.POST "/inventory", entry, (error, response, body) =>
                 expect(response.statusCode).toBe 201
-                @updater.run (msg) =>
-                  expect(msg.status).toBe true
-                  expect(msg.message).toBe 'Inventory entry updated.'
-                  @updater.rest.GET "/inventory?where=sku%3D%22mastersku-#{unique}%22", (error, response, body) ->
-                    expect(response.statusCode).toBe 200
-                    entries = body.results
-                    expect(entries[0].quantityOnStock).toBe 3
-                    done()
+                entry =
+                  sku: "mastersku-#{unique}"
+                  quantityOnStock: 7
+                  supplyChannel:
+                    typeId: 'channel'
+                    id: retailerChannel.id
+                @updater.rest.POST "/inventory", entry, (error, response, body) =>
+                  expect(response.statusCode).toBe 201
+                  @updater.run (msg) =>
+                    expect(msg.status).toBe true
+                    expect(msg.message).toBe 'Inventory entry updated.'
+                    @updater.rest.GET "/inventory?where=sku%3D%22mastersku-#{unique}%22", (error, response, body) ->
+                      expect(response.statusCode).toBe 200
+                      entries = body.results
+                      expect(entries[0].quantityOnStock).toBe 3
+                      done()

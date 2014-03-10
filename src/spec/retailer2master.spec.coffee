@@ -4,12 +4,19 @@ Q = require 'q'
 
 describe 'MarketPlaceStockUpdater', ->
   beforeEach ->
-    opts =
-      config:
+    options =
+      baseConfig:
+        logConfig: {}
+      master:
         project_key: 'x'
         client_id: 'y'
         client_secret: 'z'
-    @updater = new MarketPlaceStockUpdater opts, 'a', 'b', 'c'
+      retailer:
+        project_key: 'a'
+        client_id: 'b'
+        client_secret: 'c'
+
+    @updater = new MarketPlaceStockUpdater options
 
   describe '#_enhanceWithRetailerChannel', ->
     it 'should add the supplyChannel', ->
