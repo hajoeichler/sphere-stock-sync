@@ -60,6 +60,14 @@ describe '#run', ->
       expect(msg.message).toBe 'Nothing to do.'
       done()
 
+  # workflow
+  # - create a product type
+  # - create a product for the master
+  # - create a product for the retailer with the mastersku attribute
+  # - create inventory item in the master with channel of retailer
+  # - create inventory item in retailer
+  # - run update
+  # - check that master inventory is updated
   it 'sync one inventory entry', (done) ->
     unique = new Date().getTime()
     pt =
@@ -69,8 +77,8 @@ describe '#run', ->
         name: 'mastersku'
         label:
           de: 'Master SKU'
-        type: 'text'
-        isVariant: true
+        type:
+          name: 'text'
         isRequired: false
         inputHint: 'SingleLine'
       }]
@@ -96,27 +104,25 @@ describe '#run', ->
         ]
         @updater.rest.POST "/products", JSON.stringify(p), (error, response, body) =>
           expect(response.statusCode).toBe 201
-          ie =
-            sku: "mastersku-#{unique}"
+          entry =
+            sku: "retailer-#{unique}"
             quantityOnStock: 3
-          @updater.ensureChannelByKey(@updater.rest, Config.config.project_key).then (channel) =>
-            @updater.rest.POST "/inventory", JSON.stringify(ie), (error, response, body) =>
+          @updater.ensureChannelByKey(@updater.rest, Config.config.project_key).then (retailerChannel) =>
+            @updater.rest.POST "/inventory", JSON.stringify(entry), (error, response, body) =>
               expect(response.statusCode).toBe 201
-              ie =
-                sku: "retailer-#{unique}"
+              entry =
+                sku: "mastersku-#{unique}"
                 quantityOnStock: 7
-                channel:
+                supplyChannel:
                   typeId: 'channel'
-                  id: channel.id
-              @updater.rest.POST "/inventory", JSON.stringify(ie), (error, response, body) =>
+                  id: retailerChannel.id
+              @updater.rest.POST "/inventory", JSON.stringify(entry), (error, response, body) =>
                 expect(response.statusCode).toBe 201
                 @updater.run (msg) =>
                   expect(msg.status).toBe true
-                  expect(_.size(msg.message)).toBe 2
-                  expect(msg.message["The updater will not create new inventory entry. sku: mastersku-#{unique}"]).toBe 1
-                  expect(msg.message['Inventory entry updated.']).toBe 1
+                  expect(msg.message).toBe 'Inventory entry updated.'
                   @updater.rest.GET "/inventory?where=sku%3D%22mastersku-#{unique}%22", (error, response, body) ->
                     expect(response.statusCode).toBe 200
                     entries = JSON.parse(body).results
-                    expect(entries[0].quantityOnStock).toBe 7
+                    expect(entries[0].quantityOnStock).toBe 3
                     done()
