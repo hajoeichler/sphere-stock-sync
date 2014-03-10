@@ -1,4 +1,4 @@
-MarketPlaceStockUpdater = require('../main').MarketPlaceStockUpdater
+MarketPlaceStockUpdater = require '../lib/retailer2master'
 _ = require('underscore')._
 Q = require 'q'
 

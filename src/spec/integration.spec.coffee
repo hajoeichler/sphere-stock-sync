@@ -1,7 +1,7 @@
 _ = require('underscore')._
 Config = require '../config'
-MarketPlaceStockUpdater = require('../main').MarketPlaceStockUpdater
-Q = require('q')
+MarketPlaceStockUpdater = require '../lib/retailer2master'
+Q = require 'q'
 
 # Increase timeout
 jasmine.getEnv().defaultTimeoutInterval = 20000

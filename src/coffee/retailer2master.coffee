@@ -13,9 +13,6 @@ class MarketPlaceStockUpdater extends InventoryUpdater
       client_secret: retailerClientSecret
     @retailerRest = new Rest config: cfg
 
-  elasticio: (msg, cfg, cb, snapshot) ->
-    @run cb
-
   run: (callback) ->
     Q.all([
       @allInventoryEntries(@retailerRest),
