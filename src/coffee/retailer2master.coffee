@@ -95,8 +95,6 @@ class MarketPlaceStockUpdater extends InventoryUpdater
       entry.sku = retailerSku2masterSku[entry.sku]
       entry
 
-  # TODO:
-  # - get only published products
   retailerProducts: (staged = true) ->
     deferred = Q.defer()
     @retailerRest.GET "/product-projections?limit=0", (error, response, body) ->
