@@ -8,11 +8,18 @@ class MarketPlaceStockUpdater extends InventoryUpdater
     throw new Error 'No base configuration in options!' unless options.baseConfig
     throw new Error 'No master configuration in options!' unless options.master
     throw new Error 'No retailer configuration in options!' unless options.retailer
-    super config: _.extend(options.master, options.baseConfig)
+
+    masterOpts = _.clone options.baseConfig
+    masterOpts.config = options.master
+    retialerOpts = _.clone options.baseConfig
+    retialerOpts.config = options.retailer
+
+    super masterOpts
+    @masterRest = @rest
+    @retailerRest = new Rest retialerOpts
+
     @logger = options.baseConfig.logConfig.logger
     @retailerProjectKey = options.retailer.project_key
-    @retailerRest = new Rest config: _.extend(options.retailer, options.baseConfig)
-    @masterRest = @rest
 
   run: (callback) ->
     Q.all([
