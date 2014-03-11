@@ -95,7 +95,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
       entry.sku = retailerSku2masterSku[entry.sku]
       entry
 
-  retailerProducts: (staged = true) ->
+  retailerProducts: () ->
     deferred = Q.defer()
     @retailerRest.GET "/product-projections?limit=0", (error, response, body) ->
       if error
