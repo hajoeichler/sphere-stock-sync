@@ -34,8 +34,11 @@ options =
 
 updater = new MarketPlaceStockUpdater options
 updater.run (msg) ->
+  exitCode = 0
   if msg.status
     logger.info msg
-    process.exit 0
-  logger.error msg
-  process.exit 1
+  else
+    logger.error msg
+    exitCode = 1
+  process.on 'exit', ->
+    process.exit exitCode
