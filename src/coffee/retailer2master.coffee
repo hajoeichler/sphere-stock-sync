@@ -11,12 +11,12 @@ class MarketPlaceStockUpdater extends InventoryUpdater
 
     masterOpts = _.clone options.baseConfig
     masterOpts.config = options.master
-    retialerOpts = _.clone options.baseConfig
-    retialerOpts.config = options.retailer
+    retailerOpts = _.clone options.baseConfig
+    retailerOpts.config = options.retailer
 
     super masterOpts
     @masterRest = @rest
-    @retailerRest = new Rest retialerOpts
+    @retailerRest = new Rest retailerOpts
 
     @logger = options.baseConfig.logConfig.logger
     @retailerProjectKey = options.retailer.project_key
