@@ -26,7 +26,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
         validInventory = @_getInventoryWithMapping enhancedRetailerInventory, mapping
         @logger.debug "Inventory entries with mapping #: #{_.size validInventory}" if @logger
         unless _.size(enhancedRetailerInventory) is _.size(validInventory)
-          @logger.error "There are inventory entries we can't map to master" if @logger
+          @logger.warn "There are inventory entries we can't map to master" if @logger
 
         mappedInventory = @_replaceSKUs validInventory, mapping
         @createOrUpdate mappedInventory, callback
