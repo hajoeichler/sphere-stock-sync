@@ -24,7 +24,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
   run: (callback) ->
     Q.all([
       @allInventoryEntries(@retailerRest),
-      @ensureChannelByKey(@masterRest, @retailerProjectKey)
+      @ensureChannelByKey(@masterRest, @retailerProjectKey, ['InventorySupply', 'OrderExport', 'OrderImport'])
     ]).spread (retailerInventory, retailerChannel) =>
       @logger.debug "Retailer inventory entries: #{_.size retailerInventory}" if @logger
       enhancedRetailerInventory = @_enhanceWithRetailerChannel retailerInventory, retailerChannel.id
