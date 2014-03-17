@@ -1,8 +1,9 @@
-_ = require('underscore')._
-Config = require '../config'
-MarketPlaceStockUpdater = require '../lib/retailer2master'
-Logger = require '../lib/logger'
 Q = require 'q'
+_ = require 'underscore'
+Config = require '../config'
+Logger = require '../lib/logger'
+utils = require '../lib/utils'
+MarketPlaceStockUpdater = require '../lib/retailer2master'
 
 # Increase timeout
 jasmine.getEnv().defaultTimeoutInterval = 20000
@@ -48,25 +49,23 @@ describe '#run', ->
             deferred.reject body
       deferred.promise
 
-    @updater.rest.GET "/inventory?limit=0", (error, response, body) =>
-      stocks = body.results
-      console.log "Cleaning up #{stocks.length} inventory entries."
+    utils.pagedFetch(@updater.rest, '/inventory')
+    .then (allInventories) =>
+      console.log "Cleaning up #{allInventories.length} inventory entries."
       dels = []
-      for s in stocks
-        dels.push delInventory(s.id)
+      for entry in allInventories
+        dels.push delInventory(entry.id)
 
-      @updater.rest.GET "/products?limit=0", (error, response, body) ->
-        products = body.results
-        console.log "Cleaning up #{stocks.length} products."
-        dels = []
-        for p in products
-          dels.push delProducts(p.id, p.version)
+      utils.pagedFetch(@updater.rest, '/products')
+    .then (allProducts) ->
+      console.log "Cleaning up #{allProducts.length} products."
+      dels = []
+      for product in allProducts
+        dels.push delProducts(product.id, product.version)
 
-        Q.all(dels).then (v) ->
-          done()
-        .fail (err) ->
-          console.log err
-          done()
+      Q.all(dels)
+    .then (v) -> done()
+    .fail (error) -> done(error)
 
   it 'do nothing', (done) ->
     @updater.run (msg) ->

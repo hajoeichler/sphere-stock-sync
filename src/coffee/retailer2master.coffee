@@ -1,9 +1,11 @@
-_ = require('underscore')._
-InventoryUpdater = require('sphere-node-sync').InventoryUpdater
-Rest = require('sphere-node-connect').Rest
 Q = require 'q'
+_ = require 'underscore'
+{Rest} = require 'sphere-node-connect'
+{InventoryUpdater} = require 'sphere-node-sync'
+utils = require './utils'
 
 class MarketPlaceStockUpdater extends InventoryUpdater
+
   constructor: (options = {}) ->
     throw new Error 'No base configuration in options!' unless options.baseConfig
     throw new Error 'No master configuration in options!' unless options.master
@@ -23,7 +25,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
 
   run: (callback) ->
     Q.all([
-      @allInventoryEntries(@retailerRest),
+      @allInventoryEntries(@retailerRest, 'retailer'),
       @ensureChannelByKey(@masterRest, @retailerProjectKey, ['InventorySupply', 'OrderExport', 'OrderImport'])
     ]).spread (retailerInventory, retailerChannel) =>
       @logger.debug "Retailer inventory entries: #{_.size retailerInventory}" if @logger
@@ -43,17 +45,14 @@ class MarketPlaceStockUpdater extends InventoryUpdater
 
   initMatcher: () ->
     deferred = Q.defer()
-    Q.all([
-      @retailerProducts()
-      @allInventoryEntries(@masterRest)
-    ]).spread (retailerProducts, masterInventory) =>
-      if @logger
-        @logger.debug "Master inventory entries: #{_.size masterInventory}"
-        @logger.debug "Retailer products: #{_.size retailerProducts}"
-
+    @allInventoryEntries(@masterRest, 'master')
+    .then (masterInventory) =>
+      @logger.debug "Master inventory entries: #{_.size masterInventory}" if @logger
       @existingInventoryEntries = masterInventory
+      @retailerProducts(@retailerRest)
+    .then (retailerProducts) =>
+      @logger.debug "Retailer products: #{_.size retailerProducts}" if @logger
       deferred.resolve @_createSkuMap(retailerProducts)
-
     deferred.promise
 
   _createSkuMap: (products) ->
@@ -95,16 +94,33 @@ class MarketPlaceStockUpdater extends InventoryUpdater
       entry.sku = retailerSku2masterSku[entry.sku]
       entry
 
-  retailerProducts: () ->
+  allInventoryEntries: (rest, type) ->
     deferred = Q.defer()
-    @retailerRest.GET "/product-projections?limit=0", (error, response, body) ->
-      if error
-        deferred.reject 'Error on getting retailers products: ' + error
-      else if response.statusCode isnt 200
-        deferred.reject 'Problem on getting retailers products: ' + error
+    process.stdout.write "Fetching inventories from #{type} "
+    utils.pagedFetch(rest, '/inventory')
+    .then (products) ->
+      deferred.resolve products
+    .progress (notification) ->
+      if notification.inProgress
+        process.stdout.write notification.message
       else
-        retailerProducts = body.results
-        deferred.resolve retailerProducts
+        console.log notification.message
+    .fail (error) -> deferred.reject "Problem on getting inventory entries: #{error}"
     deferred.promise
+
+  retailerProducts: (rest)->
+    deferred = Q.defer()
+    process.stdout.write 'Fetching products from retailer '
+    utils.pagedFetch(rest, '/product-projections')
+    .then (products) ->
+      deferred.resolve products
+    .progress (notification) ->
+      if notification.inProgress
+        process.stdout.write notification.message
+      else
+        console.log notification.message
+    .fail (error) -> deferred.reject "Problem on getting retailer products: #{error}"
+    deferred.promise
+
 
 module.exports = MarketPlaceStockUpdater
