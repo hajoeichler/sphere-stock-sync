@@ -3,7 +3,7 @@ Q = require 'q'
 # TODO: move it to `sphere-node-client` or `sphere-node-utils`
 module.exports =
 
-  pagedFetch: (rest, endpoint)->
+  pagedFetch: (rest, endpoint) ->
     deferred = Q.defer()
     _page = (offset = 0, limit = 100, total, acc = []) ->
       if total? and (offset + limit) >= total + limit
@@ -12,7 +12,7 @@ module.exports =
           message: ' done'
         deferred.resolve acc
       else
-        rest.GET endpoint, (error, response, body) ->
+        rest.GET "#{endpoint}?offset=#{offset}&limit=#{limit}", (error, response, body) ->
           unless total
             deferred.notify
               inProgress: true
