@@ -5,6 +5,13 @@ MarketPlaceStockUpdater = require '../lib/retailer2master'
 
 argv = require('optimist')
   .usage('Usage: $0 --projectKey key --clientId id --clientSecret secret --logDir dir --logLevel level --timeout timeout')
+  .describe('projectKey', 'your SPHERE.IO project-key')
+  .describe('clientId', 'your SPHERE.IO OAuth client id')
+  .describe('clientSecret', 'your SPHERE.IO OAuth client secret')
+  .describe('timeout', 'timeout for requests')
+  .describe('sphereHost', 'SPHERE.IO API host to connecto to')
+  .describe('logLevel', 'log level for file logging')
+  .describe('logDir', 'directory to store logs')
   .default('logLevel', 'info')
   .default('logDir', '.')
   .default('timeout', 60000)
@@ -14,7 +21,7 @@ argv = require('optimist')
 logger = new Logger
   streams: [
     { level: 'error', stream: process.stderr }
-    { level: argv.logLevel, path: "#{argv.logDir}/sphere-stock-sync-#{argv.projectKey}.log" }
+    { level: argv.logLevel, path: "#{argv.logDir}/sphere-stock-sync_#{argv.projectKey}.log" }
   ]
 
 process.on 'SIGUSR2', ->
@@ -31,6 +38,8 @@ options =
     project_key: argv.projectKey
     client_id: argv.clientId
     client_secret: argv.clientSecret
+
+options.baseConfig.host = argv.sphereHost if argv.sphereHost?
 
 updater = new MarketPlaceStockUpdater options
 updater.run (msg) ->
