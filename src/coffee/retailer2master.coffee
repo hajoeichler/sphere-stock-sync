@@ -28,12 +28,12 @@ class MarketPlaceStockUpdater extends InventoryUpdater
       @allInventoryEntries(@retailerRest, 'retailer'),
       @ensureChannelByKey(@masterRest, @retailerProjectKey, ['InventorySupply', 'OrderExport', 'OrderImport'])
     ]).spread (retailerInventory, retailerChannel) =>
-      @logger.debug "Retailer inventory entries: #{_.size retailerInventory}" if @logger
+      @logger.info "Retailer inventory entries: #{_.size retailerInventory}" if @logger
       enhancedRetailerInventory = @_enhanceWithRetailerChannel retailerInventory, retailerChannel.id
 
       @initMatcher().then (mapping) =>
         validInventory = @_getInventoryWithMapping enhancedRetailerInventory, mapping
-        @logger.debug "Inventory entries with mapping #: #{_.size validInventory}" if @logger
+        @logger.info "Inventory entries with mapping #: #{_.size validInventory}" if @logger
         unless _.size(enhancedRetailerInventory) is _.size(validInventory)
           @logger.warn "There are inventory entries we can't map to master" if @logger
 
