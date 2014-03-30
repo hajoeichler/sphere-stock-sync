@@ -2,7 +2,6 @@ Q = require 'q'
 _ = require 'underscore'
 Config = require '../config'
 Logger = require '../lib/logger'
-utils = require '../lib/utils'
 MarketPlaceStockUpdater = require '../lib/retailer2master'
 
 # Increase timeout
@@ -49,19 +48,15 @@ describe '#run', ->
             deferred.reject body
       deferred.promise
 
-    utils.pagedFetch(@updater.rest, '/inventory')
-    .then (allInventories) =>
-      console.log "Cleaning up #{allInventories.length} inventory entries."
-      dels = []
-      for entry in allInventories
-        dels.push delInventory(entry.id)
+    @updater.retailerClient.inventoryEntries.perPage(0).fetch()
+    .then (result) =>
+      console.log "Cleaning up #{_.size result.results} inventory entries."
+      dels = _.map result.results, (e) -> delInventory e.id
 
-      utils.pagedFetch(@updater.rest, '/products')
-    .then (allProducts) ->
-      console.log "Cleaning up #{allProducts.length} products."
-      dels = []
-      for product in allProducts
-        dels.push delProducts(product.id, product.version)
+      @updater.retailerClient.products.perPage(0).fetch()
+    .then (result) ->
+      console.log "Cleaning up #{_.size result.results} products."
+      dels = _.map result.results, (p) -> delProducts p.id, p.version
 
       Q.all(dels)
     .then (v) -> done()

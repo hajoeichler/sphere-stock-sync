@@ -1,8 +1,7 @@
 Q = require 'q'
 _ = require 'underscore'
-{Rest} = require 'sphere-node-connect'
 {InventoryUpdater} = require 'sphere-node-sync'
-utils = require './utils'
+SphereClient = require 'sphere-node-client'
 
 class MarketPlaceStockUpdater extends InventoryUpdater
 
@@ -13,20 +12,23 @@ class MarketPlaceStockUpdater extends InventoryUpdater
 
     masterOpts = _.clone options.baseConfig
     masterOpts.config = options.master
+    super masterOpts
+
     retailerOpts = _.clone options.baseConfig
     retailerOpts.config = options.retailer
 
-    super masterOpts
-    @masterRest = @rest
-    @retailerRest = new Rest retailerOpts
+    @masterClient = new SphereClient masterOpts
+    @retailerClient = new SphereClient retailerOpts
 
     @logger = options.baseConfig.logConfig.logger
     @retailerProjectKey = options.retailer.project_key
 
+    @fetchHours = options.baseConfig.fetchHours or 24
+
   run: (callback) ->
     Q.all([
-      @allInventoryEntries(@retailerRest, 'retailer'),
-      @ensureChannelByKey(@masterRest, @retailerProjectKey, ['InventorySupply', 'OrderExport', 'OrderImport'])
+      @allInventoryEntries(@retailerClient, 'retailer'),
+      @ensureChannelByKey(@masterClient._rest, @retailerProjectKey, ['InventorySupply', 'OrderExport', 'OrderImport'])
     ]).spread (retailerInventory, retailerChannel) =>
       @logger.info "Retailer inventory entries: #{_.size retailerInventory}" if @logger
       enhancedRetailerInventory = @_enhanceWithRetailerChannel retailerInventory, retailerChannel.id
@@ -39,20 +41,20 @@ class MarketPlaceStockUpdater extends InventoryUpdater
 
         mappedInventory = @_replaceSKUs validInventory, mapping
         @createOrUpdate mappedInventory, callback
-
     .fail (msg) =>
       @returnResult false, msg, callback
 
-  initMatcher: () ->
+  initMatcher: ->
     deferred = Q.defer()
-    @allInventoryEntries(@masterRest, 'master')
+    @allInventoryEntries(@masterClient, 'master')
     .then (masterInventory) =>
       @logger.debug "Master inventory entries: #{_.size masterInventory}" if @logger
       @existingInventoryEntries = masterInventory
-      @retailerProducts(@retailerRest)
+      @retailerProducts(@retailerClient)
     .then (retailerProducts) =>
       @logger.debug "Retailer products: #{_.size retailerProducts}" if @logger
       deferred.resolve @_createSkuMap(retailerProducts)
+
     deferred.promise
 
   _createSkuMap: (products) ->
@@ -63,6 +65,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
       _.each variants, (variant) =>
         r2m = @_matchVariant(variant)
         _.extend(retailerSku2masterSku, r2m)
+
     retailerSku2masterSku
 
   _matchVariant: (variant) ->
@@ -76,6 +79,7 @@ class MarketPlaceStockUpdater extends InventoryUpdater
     return {} unless masterSku
     r2m = {}
     r2m[retailerSku] = masterSku
+
     r2m
 
   _enhanceWithRetailerChannel: (inventory, channelId) ->
@@ -94,32 +98,24 @@ class MarketPlaceStockUpdater extends InventoryUpdater
       entry.sku = retailerSku2masterSku[entry.sku]
       entry
 
-  allInventoryEntries: (rest, type) ->
+  allInventoryEntries: (client, type) ->
     deferred = Q.defer()
-    process.stdout.write "Fetching inventories from #{type} "
-    utils.pagedFetch(rest, '/inventory')
-    .then (products) ->
-      deferred.resolve products
-    .progress (notification) ->
-      if notification.inProgress
-        process.stdout.write notification.message
-      else
-        console.log notification.message
-    .fail (error) -> deferred.reject "Problem on getting inventory entries: #{error}"
+    client.inventoryEntries.perPage(0).sort('id').fetch()
+    .then (result) ->
+      deferred.resolve result.results
+    .fail (err) ->
+      deferred.reject "Problem on getting inventory entries: #{err}"
+
     deferred.promise
 
-  retailerProducts: (rest)->
+  retailerProducts: (client)->
     deferred = Q.defer()
-    process.stdout.write 'Fetching products from retailer '
-    utils.pagedFetch(rest, '/product-projections')
-    .then (products) ->
-      deferred.resolve products
-    .progress (notification) ->
-      if notification.inProgress
-        process.stdout.write notification.message
-      else
-        console.log notification.message
-    .fail (error) -> deferred.reject "Problem on getting retailer products: #{error}"
+    client.productProjections.perPage(0).sort('id').staged().fetch()
+    .then (result) ->
+      deferred.resolve result.results
+    .fail (err) ->
+      deferred.reject "Problem on getting retailer products: #{err}"
+
     deferred.promise
 
 

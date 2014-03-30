@@ -1,6 +1,6 @@
-MarketPlaceStockUpdater = require '../lib/retailer2master'
-_ = require('underscore')._
+{_} = require 'underscore'
 Q = require 'q'
+MarketPlaceStockUpdater = require '../lib/retailer2master'
 
 describe 'MarketPlaceStockUpdater', ->
   beforeEach ->

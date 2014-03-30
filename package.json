@@ -1,7 +1,7 @@
 {
   "name": "sphere-stock-sync",
   "description": "Sync your retailer inventory to your SPHERE.IO master project",
-  "version": "0.0.7",
+  "version": "0.1.0",
   "homepage": "https://github.com/hajoeichler/sphere-stock-sync",
   "private": true,
   "author": {
@@ -29,11 +29,12 @@
     "test": "grunt coverage"
   },
   "dependencies": {
-    "optimist": "0.6.0",
-    "q": "~1.0.0",
-    "sphere-node-connect": "~0.4.5",
-    "sphere-node-sync": "~0.4.9",
-    "underscore": "~1.6.0"
+    "optimist": "0.6.1",
+    "q": "1.0.1",
+    "sphere-node-client": "0.5.2",
+    "sphere-node-sync": "0.4.12",
+    "sphere-node-utils": "0.3.3",
+    "underscore": "1.6.0"
   },
   "devDependencies": {
     "coveralls": "~2.8.0",

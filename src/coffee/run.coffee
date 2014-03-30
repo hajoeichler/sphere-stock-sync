@@ -2,20 +2,23 @@ package_json = require '../package.json'
 Config = require '../config'
 Logger = require './logger'
 MarketPlaceStockUpdater = require '../lib/retailer2master'
+{ProjectCredentialsConfig} = require 'sphere-node-utils'
 
 argv = require('optimist')
   .usage('Usage: $0 --projectKey key --clientId id --clientSecret secret --logDir dir --logLevel level --timeout timeout')
   .describe('projectKey', 'your SPHERE.IO project-key')
   .describe('clientId', 'your SPHERE.IO OAuth client id')
   .describe('clientSecret', 'your SPHERE.IO OAuth client secret')
+  .describe('fetchHours', 'how many hours of modification should be fetched')
   .describe('timeout', 'timeout for requests')
   .describe('sphereHost', 'SPHERE.IO API host to connecto to')
   .describe('logLevel', 'log level for file logging')
   .describe('logDir', 'directory to store logs')
+  .default('fetchHours', 24)
+  .default('timeout', 60000)
   .default('logLevel', 'info')
   .default('logDir', '.')
-  .default('timeout', 60000)
-  .demand(['projectKey','clientId', 'clientSecret'])
+  .demand(['projectKey'])
   .argv
 
 logger = new Logger
@@ -27,27 +30,38 @@ logger = new Logger
 process.on 'SIGUSR2', ->
   logger.reopenFileStreams()
 
-options =
-  baseConfig:
-    timeout: argv.timeout
-    user_agent: "#{package_json.name} - #{package_json.version}"
-    logConfig:
-      logger: logger
-  master: Config.config
-  retailer:
-    project_key: argv.projectKey
-    client_id: argv.clientId
-    client_secret: argv.clientSecret
+credentialsConfig = ProjectCredentialsConfig.create()
+.then (credentials) ->
+  options =
+    baseConfig:
+      fetchHours: argv.fetchHours
+      timeout: argv.timeout
+      user_agent: "#{package_json.name} - #{package_json.version}"
+      logConfig:
+        logger: logger
+    master: credentials.enrichCredentials
+      project_key: Config.config.project_key
+      client_id: Config.config.client_id
+      client_secret: Config.config.client_secret
+    retailer: credentials.enrichCredentials
+      project_key: argv.projectKey
+      client_id: argv.clientId
+      client_secret: argv.clientSecret
 
-options.baseConfig.host = argv.sphereHost if argv.sphereHost?
+  options.baseConfig.host = argv.sphereHost if argv.sphereHost?
 
-updater = new MarketPlaceStockUpdater options
-updater.run (msg) ->
-  exitCode = 0
-  if msg.status
-    logger.info msg
-  else
-    logger.error msg
-    exitCode = 1
-  process.on 'exit', ->
-    process.exit exitCode
+  updater = new MarketPlaceStockUpdater options
+  updater.run (msg) ->
+    exitCode = 0
+    if msg.status
+      logger.info msg
+    else
+      logger.error msg
+      exitCode = 1
+    process.on 'exit', ->
+      process.exit exitCode
+
+.fail (err) ->
+  logger.error error: err, err
+  process.exit 1
+.done()
