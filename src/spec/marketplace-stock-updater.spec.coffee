@@ -1,12 +1,20 @@
-{_} = require 'underscore'
+_ = require 'underscore'
 Q = require 'q'
-MarketPlaceStockUpdater = require '../lib/retailer2master'
+MarketPlaceStockUpdater = require '../lib/marketplace-stock-updater'
+Logger = require '../lib/logger'
 
 describe 'MarketPlaceStockUpdater', ->
+
   beforeEach ->
+    logger = new Logger
+      streams: [
+        { level: 'info', stream: process.stdout }
+      ]
+
     options =
       baseConfig:
-        logConfig: {}
+        logConfig:
+          logger: logger
       master:
         project_key: 'x'
         client_id: 'y'

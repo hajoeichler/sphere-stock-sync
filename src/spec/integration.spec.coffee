@@ -1,18 +1,71 @@
 Q = require 'q'
 _ = require 'underscore'
+_.mixin require('sphere-node-utils')._u
 Config = require '../config'
 Logger = require '../lib/logger'
-MarketPlaceStockUpdater = require '../lib/retailer2master'
+MarketPlaceStockUpdater = require '../lib/marketplace-stock-updater'
 
-# Increase timeout
-jasmine.getEnv().defaultTimeoutInterval = 20000
+
+uniqueId = (prefix) ->
+  _.uniqueId "#{prefix}#{new Date().getTime()}_"
+
+updatePublish = (version) ->
+  version: version
+  actions: [
+    {action: 'publish'}
+  ]
+
+updateUnpublish = (version) ->
+  version: version
+  actions: [
+    {action: 'unpublish'}
+  ]
+
+cleanup = (client, logger) ->
+  logger.info 'Cleaning up...'
+  logger.debug 'Deleting old inventory entries...'
+  client.inventoryEntries.perPage(0).fetch()
+  .then (result) ->
+    Q.all _.map result.body.results, (e) ->
+      client.inventoryEntries.byId(e.id).delete(e.version)
+  .then (results) ->
+    logger.debug "#{_.size results} deleted."
+    logger.debug 'Unpublishing all products'
+  client.products.sort('id').where('masterData(published = "true")').process (payload) ->
+    Q.all _.map payload.body.results, (product) ->
+      client.products.byId(product.id).update(updateUnpublish(product.version))
+  .then (results) ->
+    logger.debug "Unpublished #{results.length} products"
+    logger.debug 'About to delete all products'
+    client.products.perPage(0).fetch()
+  .then (payload) ->
+    logger.debug "Deleting #{payload.body.total} products"
+    Q.all _.map payload.body.results, (product) ->
+      client.products.byId(product.id).delete(product.version)
+  .then (results) ->
+    logger.debug "Deleted #{results.length} products"
+    logger.debug 'About to delete all product types'
+    client.productTypes.perPage(0).fetch()
+  .then (payload) ->
+    logger.debug "Deleting #{payload.body.total} product types"
+    Q.all _.map payload.body.results, (productType) ->
+      client.productTypes.byId(productType.id).delete(productType.version)
+  .then (results) ->
+    logger.debug "Deleted #{results.length} product types"
+    Q()
 
 describe '#run', ->
+
   beforeEach (done) ->
+    @logger = new Logger
+      streams: [
+        { level: 'info', stream: process.stdout }
+      ]
+
     options =
       baseConfig:
         logConfig:
-          logger: new Logger()
+          logger: @logger
       master:
         project_key: Config.config.project_key
         client_id: Config.config.client_id
@@ -23,63 +76,39 @@ describe '#run', ->
         client_secret: Config.config.client_secret
 
     @updater = new MarketPlaceStockUpdater options
+    @client = @updater.masterClient
 
-    delInventory = (id) =>
-      deferred = Q.defer()
-      @updater.rest.DELETE "/inventory/#{id}", (error, response, body) ->
-        if error
-          deferred.reject error
-        else
-          if response.statusCode is 200 or response.statusCode is 404
-            deferred.resolve true
-          else
-            deferred.reject body
-      deferred.promise
+    cleanup(@client, @logger)
+    .then -> done()
+    .fail (error) -> done _.prettify error
+  , 30000 # 30sec
 
-    delProducts = (id, version) =>
-      deferred = Q.defer()
-      @updater.rest.DELETE "/products/#{id}?version=#{version}", (error, response, body) ->
-        if error
-          deferred.reject error
-        else
-          if response.statusCode is 200 or response.statusCode is 400
-            deferred.resolve true
-          else
-            deferred.reject body
-      deferred.promise
-
-    @updater.retailerClient.inventoryEntries.perPage(0).fetch()
-    .then (result) =>
-      console.log "Cleaning up #{_.size result.results} inventory entries."
-      dels = _.map result.results, (e) -> delInventory e.id
-
-      @updater.retailerClient.products.perPage(0).fetch()
-    .then (result) ->
-      console.log "Cleaning up #{_.size result.results} products."
-      dels = _.map result.results, (p) -> delProducts p.id, p.version
-
-      Q.all(dels)
-    .then (v) -> done()
-    .fail (error) -> done(error)
+  afterEach (done) ->
+    cleanup(@client, @logger)
+    .then -> done()
+    .fail (error) -> done _.prettify error
+  , 30000 # 30sec
 
   it 'do nothing', (done) ->
-    @updater.run (msg) ->
-      expect(msg.status).toBe true
-      expect(msg.message).toBe 'Nothing to do.'
+    @updater.run()
+    .then (msg) ->
+      expect(msg).toBe "Nothing to sync for retailer '#{Config.config.project_key}'"
       done()
+    .fail (error) -> done _.prettify error
+  , 20000 # 20sec
 
   # workflow
   # - create a product type
   # - create a product for the master
   # - create a product for the retailer with the mastersku attribute
+  # - publish retailer product
   # - create inventory item in the master with channel of retailer
   # - create inventory item in retailer
   # - run update
   # - check that master inventory is updated
   it 'sync one inventory entry', (done) ->
-    unique = new Date().getTime()
-    productType =
-      name: "PT-#{unique}"
+    mockProductType = ->
+      name: uniqueId 'PT-'
       description: 'bla'
       attributes: [{
         name: 'mastersku'
@@ -90,53 +119,72 @@ describe '#run', ->
         isRequired: false
         inputHint: 'SingleLine'
       }]
-    @updater.rest.POST '/product-types', productType, (error, response, body) =>
-      expect(response.statusCode).toBe 201
-      product =
-        productType:
-          typeId: 'product-type'
-          id: body.id
-        name:
-          en: "P-#{unique}"
-        slug:
-          en: "p-#{unique}"
-        masterVariant:
-          sku: "mastersku-#{unique}"
-      @updater.rest.POST "/products", product, (error, response, body) =>
-        expect(response.statusCode).toBe 201
-        product.slug.en = "p-#{unique}1"
-        product.masterVariant.sku = "retailer-#{unique}"
-        product.masterVariant.attributes = [
-          { name: 'mastersku', value: "mastersku-#{unique}" }
-        ]
-        @updater.rest.POST "/products", product, (error, response, body) =>
-          expect(response.statusCode).toBe 201
-          data =
-            actions: [
-              { action: 'publish' }
-            ]
-            version: body.version
-          @updater.rest.POST "/products/#{body.id}", data, (error, response, body) =>
-            expect(response.statusCode).toBe 200
-            entry =
-              sku: "retailer-#{unique}"
-              quantityOnStock: 3
-            @updater.ensureChannelByKey(@updater.rest, Config.config.project_key).then (retailerChannel) =>
-              @updater.rest.POST "/inventory", entry, (error, response, body) =>
-                expect(response.statusCode).toBe 201
-                entry =
-                  sku: "mastersku-#{unique}"
-                  quantityOnStock: 7
-                  supplyChannel:
-                    typeId: 'channel'
-                    id: retailerChannel.id
-                @updater.rest.POST "/inventory", entry, (error, response, body) =>
-                  expect(response.statusCode).toBe 201
-                  @updater.run (msg) =>
-                    expect(msg.status).toBe true
-                    expect(msg.message).toBe 'Inventory entry updated.'
-                    @updater.rest.GET "/inventory?where=sku%3D%22mastersku-#{unique}%22", (error, response, body) ->
-                      expect(response.statusCode).toBe 200
-                      entries = body.results
-                      expect(entries[0].quantityOnStock).toBe 3
-                      done()
+    mockProduct = (productType) ->
+      productType:
+        typeId: 'product-type'
+        id: productType.id
+      name:
+        en: uniqueId 'P-'
+      slug:
+        en: uniqueId 'p-'
+      masterVariant:
+        sku: uniqueId 'mastersku-'
+
+    # create productType
+    @client.productTypes.save(mockProductType())
+    .then (result) =>
+      # create 2 products
+      # - for master
+      # - for retailer (with mastersku attribute)
+      @masterProduct = mockProduct(result.body)
+      @retailerProduct = mockProduct(result.body)
+      @retailerProduct.masterVariant.attributes = [
+        { name: 'mastersku', value: @masterProduct.masterVariant.sku }
+      ]
+
+      @client.products.save(@masterProduct)
+    .then (result) =>
+      expect(result.statusCode).toBe 201
+      @masterProduct = result.body
+      @logger.debug @masterProduct, 'Master product created'
+      @client.products.save(@retailerProduct)
+    .then (result) =>
+      expect(result.statusCode).toBe 201
+      @retailerProduct = result.body
+      @logger.debug @retailerProduct, 'Retailer product created'
+      @client.products.byId(@retailerProduct.id).update(updatePublish(@retailerProduct.version))
+    .then (result) =>
+      expect(result.statusCode).toBe 200
+      @retailerProduct = result.body
+      @logger.debug @retailerProduct, 'Retailer product published'
+      @client.channels.ensure(Config.config.project_key, 'InventorySupply')
+    .then (result) =>
+      expect(result.statusCode).toBe 200
+      @retailerSku = @retailerProduct.masterData.current.masterVariant.sku
+      @masterSku = @masterProduct.masterData.staged.masterVariant.sku
+      retailerEntry =
+        sku: @retailerSku
+        quantityOnStock: 3
+      masterEntry =
+        sku: @masterSku
+        quantityOnStock: 7
+        supplyChannel:
+          typeId: 'channel'
+          id: result.body.id
+
+      Q.all [@client.inventoryEntries.save(retailerEntry), @client.inventoryEntries.save(masterEntry)]
+    .then (results) =>
+      expect(results[0].statusCode).toBe 201
+      expect(results[1].statusCode).toBe 201
+
+      @updater.run()
+    .then (msg) =>
+      expect(msg).toBe "Summary for retailer '#{Config.config.project_key}': 1 were updated, 0 were created."
+
+      @client.inventoryEntries.where("sku = \"#{@masterSku}\"").fetch()
+    .then (results) ->
+      expect(results.statusCode).toBe 200
+      expect(results.body.results[0].quantityOnStock).toBe 3
+      done()
+    .fail (error) -> done _.prettify error
+  , 60000 # 1min

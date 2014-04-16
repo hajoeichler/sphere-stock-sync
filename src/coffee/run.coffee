@@ -1,8 +1,8 @@
+{ProjectCredentialsConfig} = require 'sphere-node-utils'
+MarketPlaceStockUpdater = require '../lib/marketplace-stock-updater'
 package_json = require '../package.json'
 Config = require '../config'
 Logger = require './logger'
-MarketPlaceStockUpdater = require '../lib/retailer2master'
-{ProjectCredentialsConfig} = require 'sphere-node-utils'
 
 argv = require('optimist')
   .usage('Usage: $0 --projectKey key --clientId id --clientSecret secret --logDir dir --logLevel level --timeout timeout')
@@ -14,23 +14,30 @@ argv = require('optimist')
   .describe('sphereHost', 'SPHERE.IO API host to connecto to')
   .describe('logLevel', 'log level for file logging')
   .describe('logDir', 'directory to store logs')
+  .describe('logSilent', 'use console to print messages')
   .default('fetchHours', 24)
   .default('timeout', 60000)
   .default('logLevel', 'info')
   .default('logDir', '.')
+  .default('logSilent', false)
   .demand(['projectKey'])
   .argv
 
-logger = new Logger
+logOptions =
   streams: [
     { level: 'error', stream: process.stderr }
     { level: argv.logLevel, path: "#{argv.logDir}/sphere-stock-sync_#{argv.projectKey}.log" }
   ]
+logOptions.silent = argv.logSilent if argv.logSilent
+logger = new Logger logOptions
+if argv.logSilent
+  logger.trace = -> # noop
+  logger.debug = -> # noop
 
-process.on 'SIGUSR2', ->
-  logger.reopenFileStreams()
+process.on 'SIGUSR2', -> logger.reopenFileStreams()
 
-credentialsConfig = ProjectCredentialsConfig.create()
+
+ProjectCredentialsConfig.create()
 .then (credentials) ->
   options =
     baseConfig:
@@ -51,17 +58,16 @@ credentialsConfig = ProjectCredentialsConfig.create()
   options.baseConfig.host = argv.sphereHost if argv.sphereHost?
 
   updater = new MarketPlaceStockUpdater options
-  updater.run (msg) ->
-    exitCode = 0
-    if msg.status
-      logger.info msg
-    else
-      logger.error msg
-      exitCode = 1
-    process.on 'exit', ->
-      process.exit exitCode
+  updater.run()
+  .then (msg) ->
+    logger.info msg
+    process.exit(0)
+  .fail (error) ->
+    logger.error error, 'Oops, something went wrong!'
+    process.exit(1)
+  .done()
 
 .fail (err) ->
-  logger.error error: err, err
-  process.exit 1
+  logger.error err, "Problems on getting client credentials from config files."
+  process.exit(1)
 .done()
