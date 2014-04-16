@@ -1,5 +1,5 @@
 Q = require 'q'
-{Logger, ProjectCredentialsConfig} = require 'sphere-node-utils'
+{ProjectCredentialsConfig} = require 'sphere-node-utils'
 MarketPlaceStockUpdater = require '../lib/marketplace-stock-updater'
 package_json = require '../package.json'
 Config = require '../config'
@@ -25,10 +25,9 @@ argv = require('optimist')
   .argv
 
 logOptions =
-  name: "#{package_json.name}-#{package_json.version}:#{argv.projectKey}"
   streams: [
     { level: 'error', stream: process.stderr }
-    { level: argv.logLevel, path: "#{argv.logDir}/sphere-stock-sync.log" }
+    { level: argv.logLevel, path: "#{argv.logDir}/sphere-stock-sync_#{argv.projectKey}.log" }
   ]
 logOptions.silent = argv.logSilent if argv.logSilent
 logger = new Logger logOptions
