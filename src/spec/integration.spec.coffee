@@ -1,8 +1,9 @@
 Q = require 'q'
 _ = require 'underscore'
-_.mixin require('sphere-node-utils')._u
+{Logger, _u} = require 'sphere-node-utils'
+_.mixin _u
+package_json = require '../package.json'
 Config = require '../config'
-Logger = require '../lib/logger'
 MarketPlaceStockUpdater = require '../lib/marketplace-stock-updater'
 
 
@@ -58,6 +59,7 @@ describe '#run', ->
 
   beforeEach (done) ->
     @logger = new Logger
+      name: "#{package_json.name}-#{package_json.version}:#{Config.config.project_key}"
       streams: [
         { level: 'info', stream: process.stdout }
       ]

@@ -1,12 +1,14 @@
 _ = require 'underscore'
 Q = require 'q'
+{Logger} = require 'sphere-node-utils'
+package_json = require '../package.json'
 MarketPlaceStockUpdater = require '../lib/marketplace-stock-updater'
-Logger = require '../lib/logger'
 
 describe 'MarketPlaceStockUpdater', ->
 
   beforeEach ->
     logger = new Logger
+      name: "#{package_json.name}-#{package_json.version}:xxx"
       streams: [
         { level: 'info', stream: process.stdout }
       ]
