@@ -1,3 +1,4 @@
+Q = require 'q'
 {ProjectCredentialsConfig} = require 'sphere-node-utils'
 MarketPlaceStockUpdater = require '../lib/marketplace-stock-updater'
 package_json = require '../package.json'
@@ -36,7 +37,6 @@ if argv.logSilent
 
 process.on 'SIGUSR2', -> logger.reopenFileStreams()
 
-
 ProjectCredentialsConfig.create()
 .then (credentials) ->
   options =
@@ -61,7 +61,8 @@ ProjectCredentialsConfig.create()
   updater.run()
   .then (msg) ->
     logger.info msg
-    process.exit(0)
+    Q()
+  .then -> process.exit(0)
   .fail (error) ->
     logger.error error, 'Oops, something went wrong!'
     process.exit(1)
