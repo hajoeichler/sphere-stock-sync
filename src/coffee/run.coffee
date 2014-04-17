@@ -1,9 +1,8 @@
 Q = require 'q'
-{ProjectCredentialsConfig} = require 'sphere-node-utils'
+{ExtendedLogger, ProjectCredentialsConfig} = require 'sphere-node-utils'
 MarketPlaceStockUpdater = require '../lib/marketplace-stock-updater'
 package_json = require '../package.json'
 Config = require '../config'
-Logger = require './logger'
 
 argv = require('optimist')
   .usage('Usage: $0 --projectKey key --clientId id --clientSecret secret --logDir dir --logLevel level --timeout timeout')
@@ -25,27 +24,32 @@ argv = require('optimist')
   .argv
 
 logOptions =
+  name: "#{package_json.name}-#{package_json.version}"
   streams: [
     { level: 'error', stream: process.stderr }
-    { level: argv.logLevel, path: "#{argv.logDir}/sphere-stock-sync_#{argv.projectKey}.log" }
+    { level: argv.logLevel, path: "#{argv.logDir}/sphere-stock-sync.log" }
   ]
 logOptions.silent = argv.logSilent if argv.logSilent
-logger = new Logger logOptions
+logger = new ExtendedLogger
+  additionalFields:
+    project_key: argv.projectKey
+  logConfig: logOptions
 if argv.logSilent
-  logger.trace = -> # noop
-  logger.debug = -> # noop
+  logger.bunyanLogger.trace = -> # noop
+  logger.bunyanLogger.debug = -> # noop
 
 process.on 'SIGUSR2', -> logger.reopenFileStreams()
+process.on 'exit', => process.exit(@exitCode)
 
 ProjectCredentialsConfig.create()
-.then (credentials) ->
+.then (credentials) =>
   options =
     baseConfig:
       fetchHours: argv.fetchHours
       timeout: argv.timeout
       user_agent: "#{package_json.name} - #{package_json.version}"
       logConfig:
-        logger: logger
+        logger: logger.bunyanLogger
     master: credentials.enrichCredentials
       project_key: Config.config.project_key
       client_id: Config.config.client_id
@@ -59,16 +63,18 @@ ProjectCredentialsConfig.create()
 
   updater = new MarketPlaceStockUpdater options
   updater.run()
-  .then (msg) ->
+  .then (msg) =>
     logger.info msg
-    Q()
-  .then -> process.exit(0)
-  .fail (error) ->
+    # process.exit(0)
+    @exitCode = 0
+  .fail (error) =>
     logger.error error, 'Oops, something went wrong!'
-    process.exit(1)
+    # process.exit(1)
+    @exitCode = 1
   .done()
 
-.fail (err) ->
+.fail (err) =>
   logger.error err, "Problems on getting client credentials from config files."
-  process.exit(1)
+  # process.exit(1)
+  @exitCode = 1
 .done()
