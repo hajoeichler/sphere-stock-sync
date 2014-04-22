@@ -80,7 +80,7 @@ describe '#run', ->
         client_id: Config.config.client_id
         client_secret: Config.config.client_secret
 
-    @updater = new MarketPlaceStockUpdater options
+    @updater = new MarketPlaceStockUpdater @logger, options
     @client = @updater.masterClient
 
     cleanup(@client, @logger)

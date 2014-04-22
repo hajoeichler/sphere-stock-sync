@@ -7,7 +7,7 @@ CHANNEL_REF_NAME = 'supplyChannel'
 
 class MarketPlaceStockUpdater
 
-  constructor: (options = {}) ->
+  constructor: (@logger, options = {}) ->
     throw new Error 'No base configuration in options!' unless options.baseConfig
     throw new Error 'No master configuration in options!' unless options.master
     throw new Error 'No retailer configuration in options!' unless options.retailer
@@ -22,7 +22,6 @@ class MarketPlaceStockUpdater
     @masterClient = new SphereClient masterOpts
     @retailerClient = new SphereClient retailerOpts
 
-    @logger = options.baseConfig.logConfig.logger
     @retailerProjectKey = options.retailer.project_key
     @fetchHours = options.baseConfig.fetchHours or 24
     @existingInventoryEntries = {}

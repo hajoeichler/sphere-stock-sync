@@ -29,7 +29,7 @@ describe 'MarketPlaceStockUpdater', ->
         client_id: 'b'
         client_secret: 'c'
 
-    @updater = new MarketPlaceStockUpdater options
+    @updater = new MarketPlaceStockUpdater logger, options
 
   describe '#_enhanceWithRetailerChannel', ->
     it 'should add the supplyChannel', ->

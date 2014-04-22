@@ -61,7 +61,7 @@ ProjectCredentialsConfig.create()
 
   options.baseConfig.host = argv.sphereHost if argv.sphereHost?
 
-  updater = new MarketPlaceStockUpdater options
+  updater = new MarketPlaceStockUpdater logger, options
   updater.run()
   .then (msg) =>
     logger.info msg
