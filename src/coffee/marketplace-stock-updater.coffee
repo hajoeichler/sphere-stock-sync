@@ -2,6 +2,7 @@ Q = require 'q'
 _ = require 'underscore'
 SphereClient = require 'sphere-node-client'
 {InventorySync} = require 'sphere-node-sync'
+{Qutils} = require 'sphere-node-utils'
 
 CHANNEL_REF_NAME = 'supplyChannel'
 CHANNEL_ROLES = ['InventorySupply', 'OrderExport', 'OrderImport']
@@ -37,65 +38,67 @@ class MarketPlaceStockUpdater
   run: (callback) ->
     @_resetSummary()
 
+    # process products in retailer
     @masterClient.channels.ensure(@retailerProjectKey, CHANNEL_ROLES)
     .then (result) =>
       retailerChannel = result.body
 
-      # process products in retailer
-      @retailerClient.productProjections.sort('id').staged(true).process (payload) =>
-        retailerProducts = payload.body.results
-        @logger?.debug "Fetched #{_.size retailerProducts} products from retailer"
+      # TODO: use process function (make sure that it iterates correctly based on total)
+      @retailerClient.productProjections.staged(true).all().fetch()
+      .then (payload) =>
+        allProductResults = payload.body.results
+        @logger?.debug "Fetched #{_.size allProductResults} products from retailer"
 
-        # create sku mapping (attribute -> sku)
-        mapping = @_createSkuMap(retailerProducts)
-        @logger?.debug mapping, 'Mapped SKUs for retailer products'
+        Qutils.processList allProductResults, (retailerProducts) =>
 
-        # fetch retailer inventory entries
-        @retailerClient.inventoryEntries.sort('id').process (inventoryRetailerPayload) =>
-          retailerInventoryEntries = inventoryRetailerPayload.body.results
-          @logger?.debug "Fetched #{_.size retailerInventoryEntries} inventories from retailer"
+          # create sku mapping (attribute -> sku)
+          mapping = @_createSkuMap(retailerProducts)
+          @logger?.debug mapping, 'Mapped SKUs for retailer products'
 
-          # enhance inventory entries with channel (from master)
-          enhancedRetailerInventoryEntries = @_enhanceWithRetailerChannel retailerInventoryEntries, retailerChannel.id
-          @logger?.debug {entries: enhancedRetailerInventoryEntries}, 'Retailer inventory entries enhanced with channel from master'
+          ieRetailer = @retailerClient.inventoryEntries.whereOperator('or')
+          _.each _.keys(mapping), (key) -> ieRetailer.where("sku = \"#{key}\"")
+          ieRetailer.fetch()
+          .then (result) =>
+            retailerInventoryEntries = result.body.results
+            @logger?.debug {entries: retailerInventoryEntries, skus: _.keys(mapping)}, "Fetched #{_.size retailerInventoryEntries} inventory entries from retailer"
 
-          # validate inventory entries based on SKU mapping
-          [validInventoryEntries, notValidInventoryEntries] = _.partition enhancedRetailerInventoryEntries, (entry) =>
-            @_validateInventoryWithMapping entry, mapping
-          @logger?.debug {entries: validInventoryEntries}, "There are #{_.size validInventoryEntries} valid inventory entries"
+            # enhance inventory entries with channel (from master)
+            enhancedRetailerInventoryEntries = @_enhanceWithRetailerChannel retailerInventoryEntries, retailerChannel.id
 
-          if _.size(notValidInventoryEntries) > 0
-            @logger?.warn {entries: notValidInventoryEntries}, "There are inventory entries we can't map to master SKUs"
+            # map inventory entries by replacing SKUs with the masterSKU (found in variant attributes of retailer products)
+            # this way we can then query those inventories from master and decide whether to update or create them
+            mappedInventoryEntries = @_replaceSKUs enhancedRetailerInventoryEntries, mapping
+            @logger?.debug {entries: mappedInventoryEntries}, "#{_.size mappedInventoryEntries} inventory entries are ready to be processed"
+            return Q() if _.size(mappedInventoryEntries) is 0
 
-          # replace SKUs
-          mappedInventoryEntries = @_replaceSKUs validInventoryEntries, mapping
+            ieMaster = @masterClient.inventoryEntries.whereOperator('or')
+            _.each mappedInventoryEntries, (entry) -> ieMaster.where("sku = \"#{entry.sku}\"")
+            ieMaster.fetch()
+            .then (result) =>
+              existingInventoryEntries = result.body.results
+              @logger?.debug {entries: existingInventoryEntries}, "Found #{_.size existingInventoryEntries} matching inventory entries in master"
 
-          return Q() if _.size(mappedInventoryEntries) is 0
-
-          # time to fetch inventory entries from master and update stuff
-          @masterClient.inventoryEntries.sort('id').process (inventoryMasterPayload) =>
-            masterInventoryEntries = inventoryMasterPayload.body.results
-            @logger?.debug "Fetched #{_.size masterInventoryEntries} inventories from retailer"
-
-            Q.allSettled _.map mappedInventoryEntries, (entry) =>
-              existingEntry = @_match(entry, masterInventoryEntries)
-              if existingEntry?
-                @summary.toUpdate++
-                @inventorySync.buildActions(entry, existingEntry).update()
-              else
-                @summary.toCreate++
-                @masterClient.inventoryEntries.save(entry)
-            .then (results) =>
-              failures = []
-              _.each results, (result) =>
-                if result.state is 'fulfilled'
-                  @summary.synced++
+              Q.allSettled _.map existingInventoryEntries, (entry) =>
+                existingEntry = _.find mappedInventoryEntries, (e) -> e.sku is entry.sku
+                @logger?.debug {entry: existingEntry}, "Found existing retailer entry for master sku #{entry.sku}"
+                if existingEntry?
+                  @summary.toUpdate++
+                  @inventorySync.buildActions(existingEntry, entry).update()
                 else
-                  @summary.failed++
-                  failures.push result.reason
-              if _.size(failures) > 0
-                @logger?.error {errors: failures}, 'Errors while syncing stock'
-              Q()
+                  @summary.toCreate++
+                  @masterClient.inventoryEntries.save(entry)
+              .then (results) =>
+                failures = []
+                _.each results, (result) =>
+                  if result.state is 'fulfilled'
+                    @summary.synced++
+                  else
+                    @summary.failed++
+                    failures.push result.reason
+                if _.size(failures) > 0
+                  @logger?.error {errors: failures}, 'Errors while syncing stock'
+                Q()
+        , {accumulate: false, maxParallel: 20}
     .then =>
       if @summary.toUpdate is 0 and @summary.toCreate is 0
         message = 'Summary: 0 unsynced stocks, everything is fine'
@@ -105,22 +108,12 @@ class MarketPlaceStockUpdater
           "#{@summary.synced} were successfully synced (#{@summary.failed} failed)"
       Q message
 
-  _match: (entry, existingInventoryEntries) ->
-    _.find existingInventoryEntries, (existingEntry) ->
-      if existingEntry.sku is entry.sku
-        if _.has(existingEntry, CHANNEL_REF_NAME) and _.has(entry, CHANNEL_REF_NAME)
-          existingEntry[CHANNEL_REF_NAME].id is entry[CHANNEL_REF_NAME].id
-        else
-          not _.has(entry, CHANNEL_REF_NAME)
-
   _enhanceWithRetailerChannel: (inventoryEntries, channelId) ->
     _.map inventoryEntries, (entry) ->
       entry.supplyChannel =
         typeId: 'channel'
         id: channelId
       entry
-
-  _validateInventoryWithMapping: (entry, mapping) -> _.has(mapping, entry.sku)
 
   _replaceSKUs: (inventoryEntries, retailerSku2masterSku) ->
     _.map inventoryEntries, (entry) ->
