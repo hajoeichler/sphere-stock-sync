@@ -57,15 +57,15 @@ class MarketPlaceStockUpdater
 
           # enhance inventory entries with channel (from master)
           enhancedRetailerInventoryEntries = @_enhanceWithRetailerChannel retailerInventoryEntries, retailerChannel.id
-          @logger?.debug enhancedRetailerInventoryEntries, 'Retailer inventory entries enhanced with channel from master'
+          @logger?.debug {entries: enhancedRetailerInventoryEntries}, 'Retailer inventory entries enhanced with channel from master'
 
           # validate inventory entries based on SKU mapping
           [validInventoryEntries, notValidInventoryEntries] = _.partition enhancedRetailerInventoryEntries, (entry) =>
             @_validateInventoryWithMapping entry, mapping
-          @logger?.debug validInventoryEntries, "There are #{_.size validInventoryEntries} valid inventory entries"
+          @logger?.debug {entries: validInventoryEntries}, "There are #{_.size validInventoryEntries} valid inventory entries"
 
           if _.size(notValidInventoryEntries) > 0
-            @logger.warn notValidInventoryEntries, "There are inventory entries we can't map to master SKUs"
+            @logger?.warn {entries: notValidInventoryEntries}, "There are inventory entries we can't map to master SKUs"
 
           # replace SKUs
           mappedInventoryEntries = @_replaceSKUs validInventoryEntries, mapping
@@ -94,7 +94,7 @@ class MarketPlaceStockUpdater
                   @summary.failed++
                   failures.push result.reason
               if _.size(failures) > 0
-                @logger.error failures, 'Errors while syncing stock'
+                @logger?.error {errors: failures}, 'Errors while syncing stock'
               Q()
     .then =>
       if @summary.toUpdate is 0 and @summary.toCreate is 0
