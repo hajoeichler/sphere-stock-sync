@@ -33,7 +33,7 @@
     "q": "1.0.1",
     "sphere-node-client": "0.7.1",
     "sphere-node-sync": "0.5.4",
-    "sphere-node-utils": "0.4.10",
+    "sphere-node-utils": "0.4.11",
     "underscore": "1.6.0"
   },
   "devDependencies": {
