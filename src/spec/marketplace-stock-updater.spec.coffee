@@ -41,20 +41,20 @@ describe 'MarketPlaceStockUpdater', ->
       expect(entries[0].supplyChannel.typeId).toBe 'channel'
       expect(entries[0].supplyChannel.id).toBe 'c-1'
 
-  describe '#_getInventoryWithMapping', ->
+  describe '#_validateInventoryWithMapping', ->
     it 'should return true when all master skus are available', ->
       entry =
         sku: 'retailerFoo'
         quantity: 0
-      entries = @updater._getInventoryWithMapping [entry], retailerFoo: 'masterBar'
-      expect(_.size entries).toBe 1
+      isValid = @updater._validateInventoryWithMapping entry, retailerFoo: 'masterBar'
+      expect(isValid).toBe true
 
     it 'should return false if a master sku is missing', ->
       entry =
         sku: 'retailerSKU'
         quantity: 0
-      entries = @updater._getInventoryWithMapping [entry], foo: 'bar'
-      expect(_.size entries).toBe 0
+      isValid = @updater._validateInventoryWithMapping entry, foo: 'bar'
+      expect(isValid).toBe false
 
   describe '#_replaceSKUs', ->
     it 'should use master sku', ->

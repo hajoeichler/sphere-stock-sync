@@ -23,7 +23,6 @@ updateUnpublish = (version) ->
   ]
 
 cleanup = (client, logger) ->
-  logger.info 'Cleaning up...'
   logger.debug 'Deleting old inventory entries...'
   client.inventoryEntries.perPage(0).fetch()
   .then (result) ->
@@ -83,12 +82,14 @@ describe '#run', ->
     @updater = new MarketPlaceStockUpdater @logger, options
     @client = @updater.masterClient
 
+    @logger.info 'About to setup...'
     cleanup(@client, @logger)
     .then -> done()
     .fail (error) -> done _.prettify error
   , 30000 # 30sec
 
   afterEach (done) ->
+    @logger.info 'About to cleanup...'
     cleanup(@client, @logger)
     .then -> done()
     .fail (error) -> done _.prettify error
@@ -97,7 +98,7 @@ describe '#run', ->
   it 'do nothing', (done) ->
     @updater.run()
     .then (msg) ->
-      expect(msg).toBe "Nothing to sync for retailer '#{Config.config.project_key}'"
+      expect(msg).toBe 'Summary: 0 unsynced stocks, everything is fine'
       done()
     .fail (error) -> done _.prettify error
   , 20000 # 20sec
@@ -184,7 +185,8 @@ describe '#run', ->
 
       @updater.run()
     .then (msg) =>
-      expect(msg).toBe "Summary for retailer '#{Config.config.project_key}': 1 were updated, 0 were created."
+      @logger.info msg
+      expect(msg).toEqual 'Summary: there were 1 unsynced stocks, (1 were updates and 0 were new) and 1 were successfully synced (0 failed)'
 
       @client.inventoryEntries.where("sku = \"#{@masterSku}\"").fetch()
     .then (results) ->
