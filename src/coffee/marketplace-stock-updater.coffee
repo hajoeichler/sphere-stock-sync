@@ -43,68 +43,63 @@ class MarketPlaceStockUpdater
     .then (result) =>
       retailerChannel = result.body
 
-      # TODO: use process function (make sure that it iterates correctly based on total)
-      @retailerClient.productProjections.staged(true).all().fetch()
-      .then (payload) =>
-        allProductResults = payload.body.results
-        @logger?.debug "Fetched #{_.size allProductResults} products from retailer"
+      @retailerClient.productProjections.staged(true).sort('id').process (payload) =>
+        retailerProducts = payload.body.results
+        @logger?.debug "Processing #{_.size retailerProducts} retailer products"
 
-        Qutils.processList allProductResults, (retailerProducts) =>
-          @logger?.debug "Processing #{_.size retailerProducts} retailer products"
+        # create sku mapping (attribute -> sku)
+        mapping = @_createSkuMap(retailerProducts)
+        @logger?.debug mapping, "Mapped #{_.size mapping} SKUs for retailer products"
 
-          # create sku mapping (attribute -> sku)
-          mapping = @_createSkuMap(retailerProducts)
-          @logger?.debug mapping, "Mapped #{_.size mapping} SKUs for retailer products"
+        currentRetailerSKUs = _.keys(mapping)
+        Qutils.processList currentRetailerSKUs, (retailerSKUs) =>
+          @logger?.debug "Processing #{_.size retailerSKUs} retailer SKUs"
 
-          currentRetailerSKUs = _.keys(mapping)
-          Qutils.processList currentRetailerSKUs, (retailerSKUs) =>
-            @logger?.debug "Processing #{_.size retailerSKUs} retailer SKUs"
+          ieRetailer = @retailerClient.inventoryEntries.whereOperator('or')
+          _.each retailerSKUs, (sku) -> ieRetailer.where("sku = \"#{sku}\"")
+          ieRetailer.fetch()
+          .then (result) =>
+            retailerInventoryEntries = result.body.results
+            @logger?.debug {entries: retailerInventoryEntries, skus: _.keys(mapping)}, "Fetched #{_.size retailerInventoryEntries} inventory entries from retailer"
 
-            ieRetailer = @retailerClient.inventoryEntries.whereOperator('or')
-            _.each retailerSKUs, (sku) -> ieRetailer.where("sku = \"#{sku}\"")
-            ieRetailer.fetch()
+            # enhance inventory entries with channel (from master)
+            enhancedRetailerInventoryEntries = @_enhanceWithRetailerChannel retailerInventoryEntries, retailerChannel.id
+
+            # map inventory entries by replacing SKUs with the masterSKU (found in variant attributes of retailer products)
+            # this way we can then query those inventories from master and decide whether to update or create them
+            mappedInventoryEntries = @_replaceSKUs enhancedRetailerInventoryEntries, mapping
+            @logger?.debug mappedInventoryEntries, "#{_.size mappedInventoryEntries} inventory entries are ready to be processed"
+            return Q() if _.size(mappedInventoryEntries) is 0
+
+            ieMaster = @masterClient.inventoryEntries.whereOperator('or')
+            _.each mappedInventoryEntries, (entry) -> ieMaster.where("sku = \"#{entry.sku}\"")
+            ieMaster.fetch()
             .then (result) =>
-              retailerInventoryEntries = result.body.results
-              @logger?.debug {entries: retailerInventoryEntries, skus: _.keys(mapping)}, "Fetched #{_.size retailerInventoryEntries} inventory entries from retailer"
+              existingInventoryEntries = result.body.results
+              @logger?.debug existingInventoryEntries, "Found #{_.size existingInventoryEntries} matching inventory entries in master"
 
-              # enhance inventory entries with channel (from master)
-              enhancedRetailerInventoryEntries = @_enhanceWithRetailerChannel retailerInventoryEntries, retailerChannel.id
-
-              # map inventory entries by replacing SKUs with the masterSKU (found in variant attributes of retailer products)
-              # this way we can then query those inventories from master and decide whether to update or create them
-              mappedInventoryEntries = @_replaceSKUs enhancedRetailerInventoryEntries, mapping
-              @logger?.debug mappedInventoryEntries, "#{_.size mappedInventoryEntries} inventory entries are ready to be processed"
-              return Q() if _.size(mappedInventoryEntries) is 0
-
-              ieMaster = @masterClient.inventoryEntries.whereOperator('or')
-              _.each mappedInventoryEntries, (entry) -> ieMaster.where("sku = \"#{entry.sku}\"")
-              ieMaster.fetch()
-              .then (result) =>
-                existingInventoryEntries = result.body.results
-                @logger?.debug existingInventoryEntries, "Found #{_.size existingInventoryEntries} matching inventory entries in master"
-
-                Q.allSettled _.map existingInventoryEntries, (entry) =>
-                  existingEntry = _.find mappedInventoryEntries, (e) -> e.sku is entry.sku
-                  @logger?.debug existingEntry, "Found existing retailer entry for master sku #{entry.sku}"
-                  if existingEntry?
-                    @summary.toUpdate++
-                    @inventorySync.buildActions(existingEntry, entry).update()
+              Q.allSettled _.map existingInventoryEntries, (entry) =>
+                existingEntry = _.find mappedInventoryEntries, (e) -> e.sku is entry.sku
+                @logger?.debug existingEntry, "Found existing retailer entry for master sku #{entry.sku}"
+                if existingEntry?
+                  @summary.toUpdate++
+                  @inventorySync.buildActions(existingEntry, entry).update()
+                else
+                  @summary.toCreate++
+                  @masterClient.inventoryEntries.save(entry)
+              .then (results) =>
+                failures = []
+                _.each results, (result) =>
+                  if result.state is 'fulfilled'
+                    @summary.synced++
                   else
-                    @summary.toCreate++
-                    @masterClient.inventoryEntries.save(entry)
-                .then (results) =>
-                  failures = []
-                  _.each results, (result) =>
-                    if result.state is 'fulfilled'
-                      @summary.synced++
-                    else
-                      @summary.failed++
-                      failures.push result.reason
-                  if _.size(failures) > 0
-                    @logger?.error failures, 'Errors while syncing stock'
-                  Q()
-          , {accumulate: false, maxParallel: 20}
+                    @summary.failed++
+                    failures.push result.reason
+                if _.size(failures) > 0
+                  @logger?.error failures, 'Errors while syncing stock'
+                Q()
         , {accumulate: false, maxParallel: 20}
+      , {accumulate: false}
     .then =>
       if @summary.toUpdate is 0 and @summary.toCreate is 0
         message = 'Summary: 0 unsynced stocks, everything is fine'
