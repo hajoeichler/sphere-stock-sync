@@ -55,7 +55,7 @@ class MarketPlaceStockUpdater
         Qutils.processList currentRetailerSKUs, (retailerSKUs) =>
           @logger?.debug "Processing #{_.size retailerSKUs} retailer SKUs"
 
-          ieRetailer = @retailerClient.inventoryEntries.whereOperator('or')
+          ieRetailer = @retailerClient.inventoryEntries.all().whereOperator('or')
           _.each retailerSKUs, (sku) -> ieRetailer.where("sku = \"#{sku}\"")
           ieRetailer.fetch()
           .then (result) =>
@@ -71,7 +71,7 @@ class MarketPlaceStockUpdater
             @logger?.debug mappedInventoryEntries, "#{_.size mappedInventoryEntries} inventory entries are ready to be processed"
             return Q() if _.size(mappedInventoryEntries) is 0
 
-            ieMaster = @masterClient.inventoryEntries.whereOperator('or')
+            ieMaster = @masterClient.inventoryEntries.all().whereOperator('or')
             _.each mappedInventoryEntries, (entry) -> ieMaster.where("sku = \"#{entry.sku}\"")
             ieMaster.fetch()
             .then (result) =>
