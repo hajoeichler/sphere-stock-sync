@@ -82,8 +82,12 @@ class MarketPlaceStockUpdater
                 existingEntry = _.find mappedInventoryEntries, (e) -> e.sku is entry.sku
                 @logger?.debug existingEntry, "Found existing retailer entry for master sku #{entry.sku}"
                 if existingEntry?
-                  @summary.toUpdate++
-                  @inventorySync.buildActions(existingEntry, entry).update()
+                  sync = @inventorySync.buildActions(existingEntry, entry)
+                  if sync.get()
+                    @summary.toUpdate++
+                    sync.update()
+                  else
+                    Q()
                 else
                   @summary.toCreate++
                   @masterClient.inventoryEntries.save(entry)
