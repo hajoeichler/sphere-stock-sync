@@ -75,22 +75,24 @@ class MarketPlaceStockUpdater
             _.each mappedInventoryEntries, (entry) -> ieMaster.where("sku = \"#{entry.sku}\"")
             ieMaster.fetch()
             .then (result) =>
-              existingInventoryEntries = result.body.results
-              @logger?.debug existingInventoryEntries, "Found #{_.size existingInventoryEntries} matching inventory entries in master"
+              existingEntriesInMaster = result.body.results
+              @logger?.debug existingEntriesInMaster, "Found #{_.size existingEntriesInMaster} matching inventory entries in master"
 
-              Q.allSettled _.map existingInventoryEntries, (entry) =>
-                existingEntry = _.find mappedInventoryEntries, (e) -> e.sku is entry.sku
-                @logger?.debug existingEntry, "Found existing retailer entry for master sku #{entry.sku}"
-                if existingEntry?
-                  sync = @inventorySync.buildActions(existingEntry, entry)
+              Q.allSettled _.map mappedInventoryEntries, (retailerEntry) =>
+                masterEntry = _.find existingEntriesInMaster, (e) -> e.sku is retailerEntry.sku
+                if masterEntry?
+                  @logger?.debug masterEntry, "Found existing inventory entry in master for sku #{retailerEntry.sku}, about to build update actions"
+                  sync = @inventorySync.buildActions(retailerEntry, masterEntry)
                   if sync.get()
                     @summary.toUpdate++
                     sync.update()
                   else
+                    @logger?.debug masterEntry, "No update necessary for entry in master with sku #{retailerEntry.sku}"
                     Q()
                 else
+                  @logger?.debug "No inventory entry found in master for sku #{retailerEntry.sku}, about to create it"
                   @summary.toCreate++
-                  @masterClient.inventoryEntries.save(entry)
+                  @masterClient.inventoryEntries.save(retailerEntry)
               .then (results) =>
                 failures = []
                 _.each results, (result) =>
