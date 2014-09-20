@@ -43,24 +43,25 @@ class MarketPlaceStockUpdater
     .then (result) =>
       retailerChannel = result.body
 
-      @retailerClient.productProjections.staged(true).sort('id').process (payload) =>
-        retailerProducts = payload.body.results
-        @logger?.debug "Processing #{_.size retailerProducts} retailer products"
+      # fetch inventories from last X hours
+      @retailerClient.inventoryEntries.last("#{@fetchHours}h").all().process (payload) =>
+        retailerInventoryEntries = payload.body.results
 
-        # create sku mapping (attribute -> sku)
-        mapping = @_createSkuMap(retailerProducts)
-        @logger?.debug mapping, "Mapped #{_.size mapping} SKUs for retailer products"
+        # fetch corresponding products for sku mapping
+        retailerProducts = @retailerClient.productProjections.staged(true).all().whereOperator('or')
+        _.each retailerInventoryEntries, (stock) ->
+          retailerProducts.where("masterVariant(sku = \"#{stock.sku}\") or variants(sku = \"#{stock.sku}\")")
 
-        currentRetailerSKUs = _.keys(mapping)
-        Qutils.processList currentRetailerSKUs, (retailerSKUs) =>
-          @logger?.debug "Processing #{_.size retailerSKUs} retailer SKUs"
+        retailerProducts.fetch()
+        .then (result) =>
+          matchedRetailerProductsBySku = result.body.results
+          # create sku mapping (attribute -> sku)
+          mapping = @_createSkuMap(matchedRetailerProductsBySku)
+          @logger?.debug mapping, "Mapped #{_.size mapping} SKUs for retailer products"
+          currentRetailerSKUs = _.keys(mapping)
 
-          ieRetailer = @retailerClient.inventoryEntries.all().whereOperator('or')
-          _.each retailerSKUs, (sku) -> ieRetailer.where("sku = \"#{sku}\"")
-          ieRetailer.fetch()
-          .then (result) =>
-            retailerInventoryEntries = result.body.results
-            @logger?.debug {entries: retailerInventoryEntries, skus: _.keys(mapping)}, "Fetched #{_.size retailerInventoryEntries} inventory entries from retailer"
+          Qutils.processList currentRetailerSKUs, (retailerSKUs) =>
+            @logger?.debug {entries: retailerInventoryEntries, skus: currentRetailerSKUs}, "Processing #{_.size retailerSKUs} retailer SKUs from matched products by #{_.size retailerInventoryEntries} inventory entries"
 
             # enhance inventory entries with channel (from master)
             enhancedRetailerInventoryEntries = @_enhanceWithRetailerChannel retailerInventoryEntries, retailerChannel.id
