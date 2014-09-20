@@ -108,10 +108,9 @@ describe '#run', ->
   # - create a product for the master
   # - create a product for the retailer with the mastersku attribute
   # - publish retailer product
-  # - create inventory item in the master with channel of retailer
   # - create inventory item in retailer
   # - run update
-  # - check that master inventory is updated
+  # - check that master inventory is created
   it 'sync one inventory entry', (done) ->
     mockProductType = ->
       name: uniqueId 'PT-'
@@ -171,22 +170,14 @@ describe '#run', ->
       retailerEntry =
         sku: @retailerSku
         quantityOnStock: 3
-      masterEntry =
-        sku: @masterSku
-        quantityOnStock: 7
-        supplyChannel:
-          typeId: 'channel'
-          id: result.body.id
-
-      Q.all [@client.inventoryEntries.save(retailerEntry), @client.inventoryEntries.save(masterEntry)]
-    .then (results) =>
-      expect(results[0].statusCode).toBe 201
-      expect(results[1].statusCode).toBe 201
+      @client.inventoryEntries.save(retailerEntry)
+    .then (result) =>
+      expect(result.statusCode).toBe 201
 
       @updater.run()
     .then (msg) =>
       @logger.info msg
-      expect(msg).toEqual 'Summary: there were 1 unsynced stocks, (1 were updates and 0 were new) and 1 were successfully synced (0 failed)'
+      expect(msg).toEqual 'Summary: there were 1 unsynced stocks, (0 were updates and 1 were new) and 1 were successfully synced (0 failed)'
 
       @client.inventoryEntries.where("sku = \"#{@masterSku}\"").fetch()
     .then (results) ->
