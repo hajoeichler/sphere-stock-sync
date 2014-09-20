@@ -47,24 +47,21 @@ class MarketPlaceStockUpdater
       @retailerClient.inventoryEntries.last("#{@fetchHours}h").all().process (payload) =>
         retailerInventoryEntries = payload.body.results
 
-        # fetch corresponding products for sku mapping
-        retailerProducts = @retailerClient.productProjections.staged(true).all().whereOperator('or')
-        _.each retailerInventoryEntries, (stock) ->
-          retailerProducts.where("masterVariant(sku = \"#{stock.sku}\") or variants(sku = \"#{stock.sku}\")")
-
-        retailerProducts.fetch()
-        .then (result) =>
-          matchedRetailerProductsBySku = result.body.results
-          # create sku mapping (attribute -> sku)
-          mapping = @_createSkuMap(matchedRetailerProductsBySku)
-          @logger?.debug mapping, "Mapped #{_.size mapping} SKUs for retailer products"
-          currentRetailerSKUs = _.keys(mapping)
-
-          Qutils.processList currentRetailerSKUs, (retailerSKUs) =>
-            @logger?.debug {entries: retailerInventoryEntries, skus: currentRetailerSKUs}, "Processing #{_.size retailerSKUs} retailer SKUs from matched products by #{_.size retailerInventoryEntries} inventory entries"
+        Qutils.processList retailerInventoryEntries, (ieChunk) =>
+          # fetch corresponding products for sku mapping
+          retailerProducts = @retailerClient.productProjections.staged(true).all().whereOperator('or')
+          _.each ieChunk, (stock) ->
+            retailerProducts.where("masterVariant(sku = \"#{stock.sku}\") or variants(sku = \"#{stock.sku}\")")
+          retailerProducts.fetch()
+          .then (result) =>
+            matchedRetailerProductsBySku = result.body.results
+            # create sku mapping (attribute -> sku)
+            mapping = @_createSkuMap(matchedRetailerProductsBySku)
+            @logger?.debug mapping, "Mapped #{_.size mapping} SKUs for retailer products"
+            currentRetailerSKUs = _.keys(mapping)
 
             # enhance inventory entries with channel (from master)
-            enhancedRetailerInventoryEntries = @_enhanceWithRetailerChannel retailerInventoryEntries, retailerChannel.id
+            enhancedRetailerInventoryEntries = @_enhanceWithRetailerChannel ieChunk, retailerChannel.id
 
             # map inventory entries by replacing SKUs with the masterSKU (found in variant attributes of retailer products)
             # this way we can then query those inventories from master and decide whether to update or create them
@@ -105,7 +102,7 @@ class MarketPlaceStockUpdater
                 if _.size(failures) > 0
                   @logger?.error failures, 'Errors while syncing stock'
                 Q()
-        , {accumulate: false, maxParallel: 20}
+        , {accumulate: false, maxParallel: 10}
       , {accumulate: false}
     .then =>
       if @summary.toUpdate is 0 and @summary.toCreate is 0
