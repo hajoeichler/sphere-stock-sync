@@ -32,7 +32,7 @@
     "optimist": "0.6.1",
     "q": "1.0.1",
     "sphere-node-client": "0.8.1",
-    "sphere-node-sync": "0.5.14",
+    "sphere-node-sync": "0.5.15",
     "sphere-node-utils": "0.4.13",
     "underscore": "1.7.0"
   },
