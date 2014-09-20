@@ -21,7 +21,7 @@ class MarketPlaceStockUpdater
     retailerOpts.config = options.retailer
 
     @inventorySync = new InventorySync masterOpts
-    @masterClient = new SphereClient masterOpts
+    @masterClient = @inventorySync._client # share client instance to have only one TaskQueue
     @retailerClient = new SphereClient retailerOpts
 
     @retailerProjectKey = options.retailer.project_key
