@@ -21,7 +21,7 @@ class MarketPlaceStockUpdater
     retailerOpts.config = options.retailer
 
     @inventorySync = new InventorySync masterOpts
-    @masterClient = new SphereClient masterOpts
+    @masterClient = @inventorySync._client # share client instance to have only one TaskQueue
     @retailerClient = new SphereClient retailerOpts
 
     @retailerProjectKey = options.retailer.project_key
@@ -43,27 +43,25 @@ class MarketPlaceStockUpdater
     .then (result) =>
       retailerChannel = result.body
 
-      @retailerClient.productProjections.staged(true).sort('id').process (payload) =>
-        retailerProducts = payload.body.results
-        @logger?.debug "Processing #{_.size retailerProducts} retailer products"
+      # fetch inventories from last X hours
+      @retailerClient.inventoryEntries.last("#{@fetchHours}h").all().process (payload) =>
+        retailerInventoryEntries = payload.body.results
 
-        # create sku mapping (attribute -> sku)
-        mapping = @_createSkuMap(retailerProducts)
-        @logger?.debug mapping, "Mapped #{_.size mapping} SKUs for retailer products"
-
-        currentRetailerSKUs = _.keys(mapping)
-        Qutils.processList currentRetailerSKUs, (retailerSKUs) =>
-          @logger?.debug "Processing #{_.size retailerSKUs} retailer SKUs"
-
-          ieRetailer = @retailerClient.inventoryEntries.all().whereOperator('or')
-          _.each retailerSKUs, (sku) -> ieRetailer.where("sku = \"#{sku}\"")
-          ieRetailer.fetch()
+        Qutils.processList retailerInventoryEntries, (ieChunk) =>
+          # fetch corresponding products for sku mapping
+          retailerProducts = @retailerClient.productProjections.staged(true).all().whereOperator('or')
+          _.each ieChunk, (stock) ->
+            retailerProducts.where("masterVariant(sku = \"#{stock.sku}\") or variants(sku = \"#{stock.sku}\")")
+          retailerProducts.fetch()
           .then (result) =>
-            retailerInventoryEntries = result.body.results
-            @logger?.debug {entries: retailerInventoryEntries, skus: _.keys(mapping)}, "Fetched #{_.size retailerInventoryEntries} inventory entries from retailer"
+            matchedRetailerProductsBySku = result.body.results
+            # create sku mapping (attribute -> sku)
+            mapping = @_createSkuMap(matchedRetailerProductsBySku)
+            @logger?.debug mapping, "Mapped #{_.size mapping} SKUs for retailer products"
+            currentRetailerSKUs = _.keys(mapping)
 
             # enhance inventory entries with channel (from master)
-            enhancedRetailerInventoryEntries = @_enhanceWithRetailerChannel retailerInventoryEntries, retailerChannel.id
+            enhancedRetailerInventoryEntries = @_enhanceWithRetailerChannel ieChunk, retailerChannel.id
 
             # map inventory entries by replacing SKUs with the masterSKU (found in variant attributes of retailer products)
             # this way we can then query those inventories from master and decide whether to update or create them
@@ -104,7 +102,7 @@ class MarketPlaceStockUpdater
                 if _.size(failures) > 0
                   @logger?.error failures, 'Errors while syncing stock'
                 Q()
-        , {accumulate: false, maxParallel: 20}
+        , {accumulate: false, maxParallel: 10}
       , {accumulate: false}
     .then =>
       if @summary.toUpdate is 0 and @summary.toCreate is 0

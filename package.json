@@ -31,10 +31,10 @@
   "dependencies": {
     "optimist": "0.6.1",
     "q": "1.0.1",
-    "sphere-node-client": "0.7.6",
-    "sphere-node-sync": "0.5.14",
-    "sphere-node-utils": "0.4.11",
-    "underscore": "1.6.0"
+    "sphere-node-client": "0.8.1",
+    "sphere-node-sync": "0.5.15",
+    "sphere-node-utils": "0.4.13",
+    "underscore": "1.7.0"
   },
   "devDependencies": {
     "coveralls": "2.10.0",
