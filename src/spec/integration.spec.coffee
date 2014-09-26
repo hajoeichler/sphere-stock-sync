@@ -173,6 +173,12 @@ describe '#run', ->
       @client.inventoryEntries.save(retailerEntry)
     .then (result) =>
       expect(result.statusCode).toBe 201
+      retailerEntryWithNoMatchingProduct =
+        sku: uniqueId 'no-matching'
+        quantityOnStock: 1
+      @client.inventoryEntries.save(retailerEntryWithNoMatchingProduct)
+    .then (result) =>
+      expect(result.statusCode).toBe 201
 
       @updater.run()
     .then (msg) =>

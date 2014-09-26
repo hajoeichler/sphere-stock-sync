@@ -46,6 +46,7 @@ class MarketPlaceStockUpdater
       # fetch inventories from last X hours
       @retailerClient.inventoryEntries.last("#{@fetchHours}h").all().process (payload) =>
         retailerInventoryEntries = payload.body.results
+        @logger?.debug retailerInventoryEntries, 'About to processing following retailer inventory entries'
 
         Qutils.processList retailerInventoryEntries, (ieChunk) =>
           # fetch corresponding products for sku mapping
@@ -55,28 +56,33 @@ class MarketPlaceStockUpdater
           retailerProducts.fetch()
           .then (result) =>
             matchedRetailerProductsBySku = result.body.results
+            @logger?.debug matchedRetailerProductsBySku, 'Matched retailer products by sku'
             # create sku mapping (attribute -> sku)
             mapping = @_createSkuMap(matchedRetailerProductsBySku)
             @logger?.debug mapping, "Mapped #{_.size mapping} SKUs for retailer products"
-            currentRetailerSKUs = _.keys(mapping)
 
             # enhance inventory entries with channel (from master)
             enhancedRetailerInventoryEntries = @_enhanceWithRetailerChannel ieChunk, retailerChannel.id
+            @logger?.debug enhancedRetailerInventoryEntries, "Enhanced inventory entries witch retailer channel #{retailerChannel.id}"
 
             # map inventory entries by replacing SKUs with the masterSKU (found in variant attributes of retailer products)
             # this way we can then query those inventories from master and decide whether to update or create them
             mappedInventoryEntries = @_replaceSKUs enhancedRetailerInventoryEntries, mapping
             @logger?.debug mappedInventoryEntries, "#{_.size mappedInventoryEntries} inventory entries are ready to be processed"
-            return Q() if _.size(mappedInventoryEntries) is 0
+            # IMPORTANT: since some inventories may not be mapped to a masterSku
+            # we should simply discard them since they do not need to be sync to master
+            mappendInventoryEntriesWithMasterSkuOnly = _.filter mappedInventoryEntries, (e) -> e.sku
+            return Q() if _.size(mappendInventoryEntriesWithMasterSkuOnly) is 0
 
             ieMaster = @masterClient.inventoryEntries.all().whereOperator('or')
-            _.each mappedInventoryEntries, (entry) -> ieMaster.where("sku = \"#{entry.sku}\"")
+            _.each mappendInventoryEntriesWithMasterSkuOnly, (entry) ->
+              ieMaster.where("sku = \"#{entry.sku}\"")
             ieMaster.fetch()
             .then (result) =>
               existingEntriesInMaster = result.body.results
               @logger?.debug existingEntriesInMaster, "Found #{_.size existingEntriesInMaster} matching inventory entries in master"
 
-              Q.allSettled _.map mappedInventoryEntries, (retailerEntry) =>
+              Q.allSettled _.map mappendInventoryEntriesWithMasterSkuOnly, (retailerEntry) =>
                 masterEntry = _.find existingEntriesInMaster, (e) -> e.sku is retailerEntry.sku
                 if masterEntry?
                   @logger?.debug masterEntry, "Found existing inventory entry in master for sku #{retailerEntry.sku}, about to build update actions"
