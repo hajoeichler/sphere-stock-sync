@@ -1,6 +1,6 @@
-Q = require 'q'
 _ = require 'underscore'
-_.mixin require('sphere-node-utils')._u
+_.mixin require 'underscore-mixins'
+Promise = require 'bluebird'
 {ExtendedLogger} = require 'sphere-node-utils'
 package_json = require '../package.json'
 Config = require '../config'
@@ -26,13 +26,13 @@ cleanup = (client, logger) ->
   logger.debug 'Deleting old inventory entries...'
   client.inventoryEntries.perPage(0).fetch()
   .then (result) ->
-    Q.all _.map result.body.results, (e) ->
+    Promise.all _.map result.body.results, (e) ->
       client.inventoryEntries.byId(e.id).delete(e.version)
   .then (results) ->
     logger.debug "#{_.size results} deleted."
     logger.debug 'Unpublishing all products'
   client.products.sort('id').where('masterData(published = "true")').process (payload) ->
-    Q.all _.map payload.body.results, (product) ->
+    Promise.all _.map payload.body.results, (product) ->
       client.products.byId(product.id).update(updateUnpublish(product.version))
   .then (results) ->
     logger.debug "Unpublished #{results.length} products"
@@ -40,7 +40,7 @@ cleanup = (client, logger) ->
     client.products.perPage(0).fetch()
   .then (payload) ->
     logger.debug "Deleting #{payload.body.total} products"
-    Q.all _.map payload.body.results, (product) ->
+    Promise.all _.map payload.body.results, (product) ->
       client.products.byId(product.id).delete(product.version)
   .then (results) ->
     logger.debug "Deleted #{results.length} products"
@@ -48,11 +48,11 @@ cleanup = (client, logger) ->
     client.productTypes.perPage(0).fetch()
   .then (payload) ->
     logger.debug "Deleting #{payload.body.total} product types"
-    Q.all _.map payload.body.results, (productType) ->
+    Promise.all _.map payload.body.results, (productType) ->
       client.productTypes.byId(productType.id).delete(productType.version)
   .then (results) ->
     logger.debug "Deleted #{results.length} product types"
-    Q()
+    Promise.resolve()
 
 describe '#run', ->
 
@@ -67,9 +67,7 @@ describe '#run', ->
         ]
 
     options =
-      baseConfig:
-        logConfig:
-          logger: @logger.bunyanLogger
+      baseConfig: {}
       master:
         project_key: Config.config.project_key
         client_id: Config.config.client_id
@@ -85,14 +83,14 @@ describe '#run', ->
     @logger.info 'About to setup...'
     cleanup(@client, @logger)
     .then -> done()
-    .fail (error) -> done _.prettify error
+    .catch (error) -> done _.prettify error
   , 30000 # 30sec
 
   afterEach (done) ->
     @logger.info 'About to cleanup...'
     cleanup(@client, @logger)
     .then -> done()
-    .fail (error) -> done _.prettify error
+    .catch (error) -> done _.prettify error
   , 30000 # 30sec
 
   it 'do nothing', (done) ->
@@ -100,7 +98,7 @@ describe '#run', ->
     .then (msg) ->
       expect(msg).toBe 'Summary: 0 unsynced stocks, everything is fine'
       done()
-    .fail (error) -> done _.prettify error
+    .catch (error) -> done _.prettify error
   , 20000 # 20sec
 
   # workflow
@@ -190,5 +188,5 @@ describe '#run', ->
       expect(results.statusCode).toBe 200
       expect(results.body.results[0].quantityOnStock).toBe 3
       done()
-    .fail (error) -> done _.prettify error
+    .catch (error) -> done _.prettify error
   , 60000 # 1min

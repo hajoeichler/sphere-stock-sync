@@ -1,5 +1,4 @@
 _ = require 'underscore'
-Q = require 'q'
 {ExtendedLogger} = require 'sphere-node-utils'
 package_json = require '../package.json'
 MarketPlaceStockUpdater = require '../lib/marketplace-stock-updater'
@@ -17,9 +16,7 @@ describe 'MarketPlaceStockUpdater', ->
         ]
 
     options =
-      baseConfig:
-        logConfig:
-          logger: logger.bunyanLogger
+      baseConfig: {}
       master:
         project_key: 'x'
         client_id: 'y'

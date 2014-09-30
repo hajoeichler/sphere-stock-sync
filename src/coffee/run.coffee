@@ -1,4 +1,3 @@
-Q = require 'q'
 {ExtendedLogger, ProjectCredentialsConfig} = require 'sphere-node-utils'
 MarketPlaceStockUpdater = require '../lib/marketplace-stock-updater'
 package_json = require '../package.json'
@@ -48,8 +47,6 @@ ProjectCredentialsConfig.create()
       fetchHours: argv.fetchHours
       timeout: argv.timeout
       user_agent: "#{package_json.name} - #{package_json.version}"
-      logConfig:
-        logger: logger.bunyanLogger
     master: credentials.enrichCredentials
       project_key: Config.config.project_key
       client_id: Config.config.client_id
@@ -67,13 +64,13 @@ ProjectCredentialsConfig.create()
     logger.info msg
     # process.exit(0)
     @exitCode = 0
-  .fail (error) =>
+  .catch (error) =>
     logger.error error, 'Oops, something went wrong!'
     # process.exit(1)
     @exitCode = 1
   .done()
 
-.fail (err) =>
+.catch (err) =>
   logger.error err, "Problems on getting client credentials from config files."
   # process.exit(1)
   @exitCode = 1
