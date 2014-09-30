@@ -62,16 +62,13 @@ ProjectCredentialsConfig.create()
   updater.run()
   .then (msg) =>
     logger.info msg
-    # process.exit(0)
     @exitCode = 0
   .catch (error) =>
     logger.error error, 'Oops, something went wrong!'
-    # process.exit(1)
     @exitCode = 1
   .done()
 
 .catch (err) =>
-  logger.error err, "Problems on getting client credentials from config files."
-  # process.exit(1)
+  logger.error err, 'Problems on getting client credentials from config files.'
   @exitCode = 1
 .done()

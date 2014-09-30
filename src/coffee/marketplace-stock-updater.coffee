@@ -19,15 +19,10 @@ class MarketPlaceStockUpdater
     @masterClient = new SphereClient _.extend {}, _.deepClone(options.baseConfig),
       config: options.master
       task: globalTaskQueue
-    # masterOpts = _.clone options.baseConfig
-    # masterOpts.config = options.master
-    # masterOpts.task = globalTaskQueue
 
     @retailerClient = new SphereClient _.extend {}, _.deepClone(options.baseConfig),
       config: options.retailer
       task: globalTaskQueue
-    # retailerOpts = _.clone options.baseConfig
-    # retailerOpts.config = options.retailer
 
     @retailerProjectKey = options.retailer.project_key
     @fetchHours = options.baseConfig.fetchHours or 24
