@@ -67,7 +67,6 @@ ProjectCredentialsConfig.create()
     logger.error error, 'Oops, something went wrong!'
     @exitCode = 1
   .done()
-
 .catch (err) =>
   logger.error err, 'Problems on getting client credentials from config files.'
   @exitCode = 1
