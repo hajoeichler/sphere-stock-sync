@@ -1,7 +1,7 @@
 {
   "name": "sphere-stock-sync",
   "description": "Sync your retailer inventory to your SPHERE.IO master project",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "homepage": "https://github.com/hajoeichler/sphere-stock-sync",
   "private": true,
   "author": {
