@@ -73,10 +73,10 @@ class MarketPlaceStockUpdater
           mappendInventoryEntriesWithMasterSkuOnly = _.filter mappedInventoryEntries, (e) -> e.sku
           return Promise.resolve() if _.size(mappendInventoryEntriesWithMasterSkuOnly) is 0
 
-          ieMaster = @masterClient.inventoryEntries.all().whereOperator('or')
-          _.each mappendInventoryEntriesWithMasterSkuOnly, (entry) ->
-            ieMaster.where("sku = \"#{entry.sku}\"")
-          ieMaster.fetch()
+          ieMasterSkus = _.map mappendInventoryEntriesWithMasterSkuOnly, (entry) -> "\"#{entry.sku}\""
+          ieMasterPredicate = "sku in (#{ieMasterSkus.join(', ')})"
+
+          @masterClient.inventoryEntries.all().where(ieMasterPredicate).fetch()
           .then (result) =>
             existingEntriesInMaster = result.body.results
             @logger?.debug existingEntriesInMaster, "Found #{_.size existingEntriesInMaster} matching inventory entries in master"
